@@ -204,7 +204,8 @@ def slice_structure(content, start, end):
 # 4. Main Process
 # -------------------------------------------------------------------------
 
-def process_subject(raw_data_dir, untrimmed_dir, name, save_root, offsets_dir, specific_oms=None):
+def process_subject(raw_data_dir, untrimmed_dir, name, save_root, offsets_dir, specific_oms=None,
+                    apply_transform=True):
     
     # Setup Paths
     raw_json_dir = Path(raw_data_dir) / "Model_output" / name
@@ -279,9 +280,10 @@ def process_subject(raw_data_dir, untrimmed_dir, name, save_root, offsets_dir, s
             print("  Skipping: No JSON file found.")
             continue
             
-        # Extract RAW (Get everything) - Note: args.no_world_fix handling should happen here if inside a function
-        # For now assuming we want the fix (default True)
-        raw_content = get_raw_content(json_cands[0], apply_transform=True)
+        # Extract RAW (Get everything). apply_transform is the caller's
+        # --no_world_fix decision: Rz(-90) belongs on the Summer-25 subjects but
+        # not necessarily on earlier sessions, so it must not be hardcoded here.
+        raw_content = get_raw_content(json_cands[0], apply_transform=apply_transform)
         
         # --- 4. Determine Resampling Strategy ---
         if not raw_content['markers']:
@@ -309,6 +311,14 @@ def process_subject(raw_data_dir, untrimmed_dir, name, save_root, offsets_dir, s
         
         # Check available length after resampling
         # Just grab CoM or a marker to check length
+        if 'CentreOfMass' not in resampled_content['model_outputs']:
+            n_mo = len(resampled_content['model_outputs'])
+            print(f"  Skipping {om_idx}: no CentreOfMass in model output "
+                  f"({n_mo} model output entries).")
+            print(f"    This take was never run through Plug-in-Gait, so there are no")
+            print(f"    segment poses for the instantaneous-CoM stage to use.")
+            print(f"    Re-export it from Nexus with the model applied to include it.")
+            continue
         available_len = len(resampled_content['model_outputs']['CentreOfMass']['data'])
         others_available = min(target_len, available_len)
         
@@ -350,11 +360,15 @@ def process_subject(raw_data_dir, untrimmed_dir, name, save_root, offsets_dir, s
         final_data = slice_structure(resampled_content, others_start, others_end)
         take_com = final_data['model_output']['CentreOfMass']['data']
        
-        comp_com = f'Complete/{name}/{om_idx}/CoM.npy' 
-        comp_com = np.load(comp_com)
-        
-        assert len(take_com) == len(comp_com), f"Length mismatch in CoM for {name} {om_idx}"
-        assert np.allclose(take_com, comp_com[:,:-1], atol=1e-4), f"Data mismatch in CoM for {name} {om_idx}"
+        comp_com_path = Path('Complete') / name / om_idx / 'CoM.npy'
+        if comp_com_path.exists():
+            comp_com = np.load(comp_com_path)
+            assert len(take_com) == len(comp_com), f"Length mismatch in CoM for {name} {om_idx}"
+            assert np.allclose(take_com, comp_com[:,:-1], atol=1e-4), f"Data mismatch in CoM for {name} {om_idx}"
+            print(f"  CoM cross-check against {comp_com_path}: OK")
+        else:
+            print(f"  [!] No {comp_com_path} to cross-check against -- run combine_all.py first")
+            print(f"      if you want this stage verified against the synced output.")
          
         # --- 8. Save ---
         save_dir = Path(save_root) / name 
@@ -389,6 +403,7 @@ if __name__ == "__main__":
             name=person,
             save_root=args.out_dir,
             offsets_dir='raw_data/offsets',
-            specific_oms=args.specific_oms
+            specific_oms=args.specific_oms,
+            apply_transform=not args.no_world_fix
         )
         

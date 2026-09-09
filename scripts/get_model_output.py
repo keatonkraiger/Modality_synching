@@ -245,9 +245,21 @@ def get_consolidated_data(jsons, out_dir, apply_transform=True):
                 marker_array[:, 3] = conf
                 vicon_data['markers'][name] = marker_array
        
+        # Frame count comes from the markers, which are present even for takes
+        # that were never run through Plug-in-Gait.
+        marker_n_frames = None
+        for arr in vicon_data['markers'].values():
+            if arr is not None:
+                marker_n_frames = arr.shape[0]
+                break
+
         # 2. Extract Model Output (CoM + Joints)
-        model_output = data['ModelOutput']
-        
+        # A take that was labelled but never run through the Vicon model pipeline
+        # has an empty ModelOutput. That is not an error -- the markers, video,
+        # pressure and OpenPose for that take are still usable -- so emit what
+        # exists and let the caller decide.
+        model_output = data.get('ModelOutput', [])
+
         # Initialize joints array - we'll fill this in the correct order
         n_frames = None
         joint_data_dict = {}
@@ -281,29 +293,47 @@ def get_consolidated_data(jsons, out_dir, apply_transform=True):
                 joint_name = joint_order_mapping[name]
                 joint_data_dict[joint_name] = data_array
         
-        # 3. Create ordered joint array (N, 17, 4)
-        vicon_data['joints'] = np.zeros((n_frames, len(joint_order), 4))
-        
-        for i, joint_name in enumerate(joint_order):
-            if joint_name in joint_data_dict:
-                vicon_data['joints'][:, i, :] = joint_data_dict[joint_name]
-       
+        # 3. Create ordered joint array (N, 17, 4), when there is model output
+        has_model_output = n_frames is not None
+        if has_model_output:
+            vicon_data['joints'] = np.zeros((n_frames, len(joint_order), 4))
+
+            for i, joint_name in enumerate(joint_order):
+                if joint_name in joint_data_dict:
+                    vicon_data['joints'][:, i, :] = joint_data_dict[joint_name]
+        else:
+            n_frames = marker_n_frames
+            print(f"  [!] {om_idx}: ModelOutput is empty -- no CoM, no joint centres.")
+            print(f"      This take was labelled but never run through Plug-in-Gait.")
+            print(f"      Writing markers only; re-export from Nexus to get the rest.")
+
+        if n_frames is None:
+            print(f"  [!] {om_idx}: no markers and no model output -- nothing to save. Skipping.")
+            continue
+
         # 4. Save data
         base_filename = os.path.splitext(os.path.basename(j))[0]
         out_path = os.path.join(out_dir, base_filename)
         os.makedirs(out_path, exist_ok=True)
-        
-        # # Save CoM data
-        com_file_name = os.path.join(out_path, 'CoM.npy')
-        np.save(com_file_name, vicon_data['CoM']['CentreOfMass'])
-        print(f"Saved CoM data with shape {vicon_data['CoM']['CentreOfMass'].shape}")
-        com_floor_file_name = os.path.join(out_path, 'CoM_floor.npy')
-        np.save(com_floor_file_name, vicon_data['CoM']['CentreOfMassFloor'])
-        print(f"Saved CoM data with shape {vicon_data['CoM']['CentreOfMass'].shape}")
-        
-        # # Save joint data
-        np.save(os.path.join(out_path, 'MOCAP_3D.npy'), vicon_data['joints'])
-        print(f"Saved joints data with shape {vicon_data['joints'].shape}")
+
+        has_com = {'CentreOfMass', 'CentreOfMassFloor'} <= set(vicon_data['CoM'])
+        if has_model_output and not has_com:
+            print(f"  [!] {om_idx}: model output present but CoM channels missing "
+                  f"(found: {sorted(vicon_data['CoM']) or 'none'}). Skipping CoM files.")
+
+        if has_model_output and has_com:
+            # # Save CoM data
+            com_file_name = os.path.join(out_path, 'CoM.npy')
+            np.save(com_file_name, vicon_data['CoM']['CentreOfMass'])
+            print(f"Saved CoM data with shape {vicon_data['CoM']['CentreOfMass'].shape}")
+            com_floor_file_name = os.path.join(out_path, 'CoM_floor.npy')
+            np.save(com_floor_file_name, vicon_data['CoM']['CentreOfMassFloor'])
+            print(f"Saved CoM data with shape {vicon_data['CoM']['CentreOfMass'].shape}")
+
+        if has_model_output:
+            # # Save joint data
+            np.save(os.path.join(out_path, 'MOCAP_3D.npy'), vicon_data['joints'])
+            print(f"Saved joints data with shape {vicon_data['joints'].shape}")
         
         # # Save marker data as a N,len(marker_order),4 array
         marker_data_array = np.zeros((n_frames, len(marker_order), 4))

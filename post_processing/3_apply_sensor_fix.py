@@ -4,11 +4,11 @@
 Cleaning pipeline for faulty sensors across all OMs.
 
 Reads faulty_sensors.json annotations and applies a 3×3 neighborhood smoothing
-to all faulty sensors (union across all OMs) in Complete/<Subject>/OM*/pressure.npy.
+to all faulty sensors (union across all OMs) in Complete/<Subject>/OM*/Pressure.npy.
 
 Optionally:
   • Creates cleaned videos for each OM
-  • Overwrites cleaned arrays inside Complete/<Subject>/OMx/pressure.npy
+  • Overwrites cleaned arrays inside Complete/<Subject>/OMx/Pressure.npy
 """
 
 import os
@@ -221,7 +221,7 @@ def run_cleaning_all(subject, create_video=False, save_cleaned=False, fps=50, ma
     ensure_dir(output_dir)
 
     # Get representative shape from the first OM
-    first_om_path = os.path.join(subj_dir, om_dirs[0], "pressure.npy")
+    first_om_path = os.path.join(subj_dir, om_dirs[0], "Pressure.npy")
     sample = np.load(first_om_path)
     H, W = sample.shape[1:3]
 
@@ -231,7 +231,7 @@ def run_cleaning_all(subject, create_video=False, save_cleaned=False, fps=50, ma
 
     # Process each OM
     for om in om_dirs:
-        path = os.path.join(subj_dir, om, "pressure.npy")
+        path = os.path.join(subj_dir, om, "Pressure.npy")
         if not os.path.exists(path):
             print(f"  Skipping missing {path}")
             continue
@@ -261,7 +261,7 @@ def main():
     parser.add_argument("--subject", type=str, required=True, help="Subject name (e.g., 'Kyle')")
     parser.add_argument("--create-video", action="store_true", help="Create cleaned visualization videos.")
     parser.add_argument("--save-cleaned", action="store_true",
-                        help="Overwrite cleaned pressure.npy files inside Complete/<Subject>/OMx/.")
+                        help="Overwrite cleaned Pressure.npy files inside Complete/<Subject>/OMx/.")
     parser.add_argument("--fps", type=int, default=50, help="FPS for video output.")
     parser.add_argument("--max-frames", type=int, default=None, help="Limit frames per video.")
     parser.add_argument("--apply-global-smooth", action="store_true", help="Apply global 3x3 smoothing to handle strip artifacts.")

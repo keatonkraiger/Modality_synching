@@ -7,24 +7,45 @@ from glob import glob
 import numpy as np
 import subprocess
 
+# Streams every take must have. Anything outside this list (the mocap-derived
+# arrays) can legitimately be absent for a take that was never run through
+# Plug-in-Gait -- see the manifest.json combine_all.py writes per take.
+REQUIRED_NPY = ['BODY25_3D.npy', 'BODY25_V1.npy', 'BODY25_V2.npy', 'Pressure.npy']
+OPTIONAL_NPY = ['MOCAP_3D.npy', 'MOCAP_MRK.npy', 'CoM.npy', 'CoM_floor.npy']
+
+
+def available_streams(om_dir):
+    """Which optional mocap streams this take actually has."""
+    return {f for f in OPTIONAL_NPY if os.path.exists(os.path.join(om_dir, f))}
+
+
 def check_frame_counts(om_dir):
-    """Check that all data files have matching frame counts."""
-    npy_files = [
-        'BODY25_3D.npy', 'BODY25_V2.npy', 'CoM_floor.npy', 'MOCAP_MRK.npy',
-        'BODY25_V1.npy', 'CoM.npy', 'MOCAP_3D.npy', 'pressure.npy'
-    ]
+    """Check that all data files present have matching frame counts."""
     video_files = ['Video_V1.mp4', 'Video_V2.mp4']
     
     frame_counts = {}
     
-    # Check .npy files
-    for npy_file in npy_files:
+    # Required .npy files - absence really is an error
+    for npy_file in REQUIRED_NPY:
         path = os.path.join(om_dir, npy_file)
         if os.path.exists(path):
             data = np.load(path)
             frame_counts[npy_file] = data.shape[0]
         else:
             raise FileNotFoundError(f"{npy_file} not found in {om_dir}")
+
+    # Optional mocap .npy files - skipped quietly when the take does not have them
+    missing_optional = []
+    for npy_file in OPTIONAL_NPY:
+        path = os.path.join(om_dir, npy_file)
+        if os.path.exists(path):
+            data = np.load(path)
+            frame_counts[npy_file] = data.shape[0]
+        else:
+            missing_optional.append(npy_file)
+    if missing_optional:
+        print(f"  [!] Partial take - no {', '.join(missing_optional)}; "
+              f"those visualisations will be skipped.")
     
     # Check video files using ffprobe
     for video_file in video_files:
@@ -449,46 +470,68 @@ if __name__ == '__main__':
         if check_frame_counts(om_dir):
             # Generate visualizations
             # Pressure
-            pressure = np.load(os.path.join(om_dir, 'pressure.npy'))
+            pressure = np.load(os.path.join(om_dir, 'Pressure.npy'))
             pressure_save_path = os.path.join(om_save_path, f"pressure.mp4")
             if 'pressure' not in args.skip_step:
                 print("[INFO] Generating pressure visualization...")
                 visualize_pressure(pressure, pressure_save_path)
 
-            # 3D skeleton + CoM
+            # 3D skeleton + CoM -- both need a CoM, which a partial take lacks
             body25 = np.load(os.path.join(om_dir, 'BODY25_3D.npy'))
+            com = com_floor = None
             if args.use_inst_com:
-                print("[INFO] Using instantaneous CoM for visualization.")
-                com = np.load(os.path.join(om_dir, 'CoM_inst.npy'))
-                # CoM floor is just setting z to 0 for visualization
-                com_floor = com.copy()
-                com_floor[:, 2] = 0
+                inst_path = os.path.join(om_dir, 'CoM_inst.npy')
+                if os.path.exists(inst_path):
+                    print("[INFO] Using instantaneous CoM for visualization.")
+                    com = np.load(inst_path)
+                    # CoM floor is just setting z to 0 for visualization
+                    com_floor = com.copy()
+                    com_floor[:, 2] = 0
+                else:
+                    print(f"[WARN] No CoM_inst.npy in {om_dir} - run instant_com.py first.")
             else:
-                com = np.load(os.path.join(om_dir, 'CoM.npy'))
-                com_floor = np.load(os.path.join(om_dir, 'CoM_floor.npy'))
+                com_path = os.path.join(om_dir, 'CoM.npy')
+                floor_path = os.path.join(om_dir, 'CoM_floor.npy')
+                if os.path.exists(com_path) and os.path.exists(floor_path):
+                    com = np.load(com_path)
+                    com_floor = np.load(floor_path)
+                else:
+                    print(f"[WARN] No CoM for this take - skipping CoM overlays.")
+
             skel_save_path = os.path.join(om_save_path, f"3D_joints.mp4")
             if 'skeleton' not in args.skip_step:
-                print("[INFO] Generating 3D skeleton + CoM visualization...")
-                animate_skeleton_and_com(body25, com, com_floor, save_path=skel_save_path)
+                if com is None:
+                    print("[SKIP] 3D skeleton + CoM: no CoM for this take.")
+                    skel_save_path = None
+                else:
+                    print("[INFO] Generating 3D skeleton + CoM visualization...")
+                    animate_skeleton_and_com(body25, com, com_floor, save_path=skel_save_path)
             
             # Markers + CoM
-            markers = np.load(os.path.join(om_dir, 'MOCAP_MRK.npy'))
+            markers_path = os.path.join(om_dir, 'MOCAP_MRK.npy')
             if args.use_inst_com:
                 markers_save_path = os.path.join(om_save_path, f"3D_markers_inst_com.mp4")
             else:
                 markers_save_path = os.path.join(om_save_path, f"3D_markers.mp4")
             if 'markers' not in args.skip_step:
-                print("[INFO] Generating 3D markers + CoM visualization...")
-                animate_markers_and_com(markers, com, com_floor, save_path=markers_save_path)
+                if com is None or not os.path.exists(markers_path):
+                    print("[SKIP] 3D markers + CoM: needs both MOCAP_MRK.npy and a CoM.")
+                    markers_save_path = None
+                else:
+                    print("[INFO] Generating 3D markers + CoM visualization...")
+                    markers = np.load(markers_path)
+                    animate_markers_and_com(markers, com, com_floor, save_path=markers_save_path)
 
-            # Collage visualization
+            # Collage visualization - only over the panels that were actually made
             video_paths = {
                 'Video_V1': os.path.join(om_dir, 'Video_V1.mp4'),
                 'Video_V2': os.path.join(om_dir, 'Video_V2.mp4'),
                 'Pressure': pressure_save_path,
-                'Joints': skel_save_path,
-                'Markers': markers_save_path,
             }
+            if skel_save_path and os.path.exists(skel_save_path):
+                video_paths['Joints'] = skel_save_path
+            if markers_save_path and os.path.exists(markers_save_path):
+                video_paths['Markers'] = markers_save_path
             if args.use_inst_com:
                 collage_path = os.path.join(om_save_path, f"final_inst_com.mp4")
             else:

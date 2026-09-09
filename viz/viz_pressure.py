@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
 # Load data
-data = np.load('/mnt/e/Data/OMs/construct_complete/Complete/Keaton/OM2/pressure.npy')  # Shape: (N, 60, 21, 2)
+data = np.load('/mnt/e/Data/OMs/construct_complete/Complete/Keaton/OM2/Pressure.npy')  # Shape: (N, 60, 21, 2)
 N = data.shape[0]
 
 # Concatenate left and right foot horizontally

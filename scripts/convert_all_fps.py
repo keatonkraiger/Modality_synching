@@ -12,6 +12,11 @@ args = parser.parse_args()
 root_dir = args.root_dir
 log_file = os.path.join(root_dir, "conversion_log.json")
 
+# Converting to 50 fps is destructive: the re-encoded file takes the original's
+# name. Before that happens the untouched source is moved into this subdirectory,
+# keeping its filename, so the data at the original frame rate is never lost.
+ORIGINAL_FPS_DIRNAME = "original_fps"
+
 # regex for OM<num>_V1.mp4 or OM<num>_V2.mp4
 pattern = re.compile(r"^OM\d+_V[12]\.mp4$", re.IGNORECASE)
 
@@ -54,7 +59,7 @@ def process_video(video_path, out_path):
     print(f"Converting {video_path} ({fps:.2f} fps → 50 fps)")
     subprocess.run(
         [
-            "ffmpeg", "-i", video_path,
+            "ffmpeg", "-y", "-i", video_path,
             "-filter:v", "fps=50",
             "-c:a", "copy",  # keep audio unchanged
             out_path
@@ -68,10 +73,24 @@ import shutil
 # Dictionary to store conversion log
 conversion_log = {}
 
-for subdir, _, files in os.walk(root_dir):
+for subdir, dirs, files in os.walk(root_dir):
+    # Never descend into the backups we make below, or a second run would try to
+    # "convert" the preserved originals and destroy them.
+    dirs[:] = [d for d in dirs if d != ORIGINAL_FPS_DIRNAME]
+
     for file in files:
         if pattern.match(file):
             in_path = os.path.join(subdir, file)
+            backup_dir = os.path.join(subdir, ORIGINAL_FPS_DIRNAME)
+            backup_path = os.path.join(backup_dir, file)
+
+            # An existing backup means a previous run already converted this take.
+            # Bail out rather than overwrite it -- that copy is the only remaining
+            # source at the original frame rate.
+            if os.path.exists(backup_path):
+                print(f"Skipping {in_path}: original already preserved at {backup_path}")
+                continue
+
             out_name = file.split('_')[1]  # e.g. V1.mp4
             out_path = os.path.join(subdir, out_name)
             processed, original_fps = process_video(in_path, out_path)
@@ -98,11 +117,15 @@ for subdir, _, files in os.walk(root_dir):
                         "original_fps": round(original_fps, 2),
                         "new_fps": 50.0,
                         "om_index": om_idx,
-                        "full_path": in_path
+                        "full_path": in_path,
+                        "original_backup": backup_path
                     }
                 
-                # Remove original file and rename new file to original name
-                os.remove(in_path) 
+                # Preserve the untouched source at its original fps, then let the
+                # re-encoded file take over the original name.
+                os.makedirs(backup_dir, exist_ok=True)
+                shutil.move(in_path, backup_path)
+                print(f"  Original ({original_fps:.2f} fps) preserved at {backup_path}")
                 shutil.move(out_path, os.path.join(subdir, file))
 
 # Save conversion log to JSON file
@@ -118,5 +141,6 @@ if conversion_log:
     print("\nSummary of converted videos:")
     for video_path, info in conversion_log.items():
         print(f"  {info['om_index']}: {info['original_fps']} fps → {info['new_fps']} fps")
+    print(f"\nOriginals preserved in '{ORIGINAL_FPS_DIRNAME}/' next to each converted video.")
 else:
     print("\nNo videos were converted.")

@@ -1,0 +1,18 @@
+# Core numerics / IO
+numpy>=1.24
+scipy>=1.10
+pandas>=2.0
+
+# Plotting + animation (all .mp4 writing goes through matplotlib's ffmpeg writer)
+matplotlib>=3.7
+
+# Video decoding / frame counting / trimming
+opencv-python>=4.8
+
+# Progress bars (post_processing/instant_com.py)
+tqdm>=4.65
+
+# GUI for the manual synchronisation tool (syncher.py) and the interactive
+# faulty-sensor annotator (post_processing/2_find_faulty_sensors.py).
+# Both need a display; on a headless box you can drop PyQt5 and skip those steps.
+PyQt5>=5.15

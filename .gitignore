@@ -205,3 +205,26 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ---------------------------------------------------------------------------
+# Dataset directories -- these hold the capture data itself (hundreds of GB of
+# video, .npy arrays and OpenPose JSON). They live alongside the code but must
+# never be committed.
+# ---------------------------------------------------------------------------
+raw_data/
+untrimmed/
+Complete/
+Model_output/
+OrdinaryMovements/
+post_processing_output/
+manual_check/
+om_comparison/
+
+# Data artefacts, wherever they land
+*.npy
+*.mp4
+*.csv
+*.xcp
+
+# Preserved pre-conversion source videos (scripts/convert_all_fps.py)
+original_fps/
