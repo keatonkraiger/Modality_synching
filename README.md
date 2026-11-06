@@ -111,7 +111,8 @@ Model_output/<Subject>/OM<i>.npy             (data) — full Vicon structure,
 
 Complete/<Subject>/OM<i>/                    (data) — THE DELIVERABLE, 50 fps,
 ├── Video_V1.mp4, Video_V2.mp4                all streams frame-for-frame aligned
-├── Pressure.npy            (N,60,21,2)
+├── Pressure.npy            (N,60,21,2)   as recorded (after clip/threshold in step 2)
+├── Pressure_clean.npy      (N,60,21,2)   faulty sensels repaired (stage D4); same NaN mask
 ├── BODY25_V1.npy, BODY25_V2.npy, BODY25_3D.npy
 ├── MOCAP_3D.npy, MOCAP_MRK.npy
 ├── CoM.npy, CoM_floor.npy                    Vicon's own CoM
@@ -121,7 +122,9 @@ Complete/om_sub_info.json                     per-subject mass / height / gender
 
 post_processing_output/                      (data) — QC videos + annotations
 ├── faulty_sensors.json                       hand-labelled dead pressure sensors
-└── <Subject>/pressure_viz/ , cleaned_pressure_viz/
+├── <Subject>/pressure_viz/ , cleaned_pressure_viz/
+└── <Subject>/pressure_clean/                 stage D4 report: summary.png, OM<i>_cop.png,
+                                             report.json, faulty_mask.npy, metrics.npz
 
 manual_check/<Subject>/OM<i>/                (data) — QC collage videos
 OrdinaryMovements/                           (data) — release mirror of Complete/
