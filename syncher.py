@@ -4,11 +4,41 @@ import json
 import numpy as np
 import subprocess
 import os
+import re
+from pathlib import Path
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
     QFileDialog, QSlider, QSpinBox, QGroupBox, QFormLayout, QSizePolicy,
-    QMessageBox, QProgressDialog
+    QMessageBox, QProgressDialog, QComboBox
 )
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from data_paths import RAW_VIDEO, WORK_PRESSURE, OFFSETS, DATA_ROOT  # noqa: E402
+import takes  # noqa: E402
+
+# raw_data/Video/<Subject>/<take>_V1.mp4 -> (Subject, take)
+_RGB_PATH_RE = re.compile(r"[\\/]Video[\\/](?P<subject>[^\\/]+)[\\/](?P<take>.+)_V[12]\.mp4$", re.IGNORECASE)
+
+
+def rgb_path_for(subject, take, view="V1"):
+    return RAW_VIDEO / subject / f"{take}_{view}.mp4"
+
+
+def pressure_path_for(subject, take):
+    return WORK_PRESSURE / subject / take / "Original_Pressure.mp4"
+
+
+def offset_path_for(subject, take):
+    return OFFSETS / subject / f"{take}.json"
+
+
+def _rel(path):
+    """Store paths relative to the data root so the JSON is portable between machines."""
+    for p in (Path(os.path.abspath(path)), Path(path).resolve()):  # with and without following symlinks
+        try:
+            return p.relative_to(DATA_ROOT).as_posix()
+        except ValueError:
+            pass
+    return str(path)
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap
 
@@ -381,10 +411,21 @@ class VideoPanel:
 
 
 class VideoSyncApp(QWidget):
-    def __init__(self, rgb_video_path=None, pressure_video_path=None):
+    def __init__(self, rgb_video_path=None, pressure_video_path=None, subject=None, take=None, view="V1"):
         super().__init__()
         self.setWindowTitle("Video Synchronization Tool")
         self.resize(1280, 800)
+
+        # Where "Save offset" writes is never asked for: it is always
+        # raw_data/offsets/<subject>/<take>.json, from --subject/--take or the RGB path.
+        self.view = view
+        take = takes.normalize(take) if take else None   # `3` -> `OM3`
+        self.subject, self.take = subject, take
+        if subject and take:
+            rgb_video_path = str(rgb_path_for(subject, take, view))
+            pressure_video_path = str(pressure_path_for(subject, take))
+        elif rgb_video_path:
+            self.subject, self.take = self._infer_take(rgb_video_path)
 
         self.rgb_video = VideoPanel("RGB Video", self, video_path=rgb_video_path)
         self.pressure_video = VideoPanel("Pressure Video", self, video_path=pressure_video_path)
@@ -406,7 +447,12 @@ class VideoSyncApp(QWidget):
         self.load_rgb_btn = QPushButton("Load RGB Video")
         self.load_pressure_btn = QPushButton("Load Pressure Video")
         self.validate_fps_btn = QPushButton("Validate FPS")
-        self.save_btn = QPushButton("Save Sync Config")
+        self.save_btn = QPushButton("Save offset")
+        self.target_label = QLabel()
+        self.take_box = None
+        if self.subject:
+            self.take_box = QComboBox()
+            self.take_box.currentIndexChanged.connect(self._on_take_selected)
         self.play_both_btn = QPushButton("Play/Pause Both")
         self.test_offset_btn = QPushButton("Test Offset Playback")
 
@@ -421,9 +467,87 @@ class VideoSyncApp(QWidget):
         self.pressure_video_path = pressure_video_path
 
         self.init_ui()
+        if self.take_box is not None:
+            self._fill_take_box(select=self.take)
+        self._preload_existing_offset()
+        self._update_target_label()
+
+    # ---------------------------------------------------------------- takes
+    @staticmethod
+    def _infer_take(rgb_path):
+        m = _RGB_PATH_RE.search(str(rgb_path))
+        return (m.group("subject"), m.group("take")) if m else (None, None)
+
+    def _fill_take_box(self, select=None):
+        names = takes.video_takes(RAW_VIDEO / self.subject)
+        self.take_box.blockSignals(True)
+        self.take_box.clear()
+        for t in names:
+            done = offset_path_for(self.subject, t).exists()
+            self.take_box.addItem(f"{'✓' if done else '·'}  {t}", t)
+        self.take_box.blockSignals(False)
+        if not names:
+            QMessageBox.warning(self, "No takes", f"No videos found in {RAW_VIDEO / self.subject}")
+            return
+        idx = names.index(select) if select in names else 0
+        self.take_box.setCurrentIndex(idx)
+        if select not in names:
+            self._on_take_selected(idx)
+
+    def _refresh_take_marks(self):
+        for i in range(self.take_box.count()):
+            t = self.take_box.itemData(i)
+            done = offset_path_for(self.subject, t).exists()
+            self.take_box.setItemText(i, f"{'✓' if done else '·'}  {t}")
+
+    def _on_take_selected(self, idx):
+        take = self.take_box.itemData(idx)
+        if take is None or take == self.take and self.rgb_video_path:
+            return
+        rgb, prs = rgb_path_for(self.subject, take, self.view), pressure_path_for(self.subject, take)
+        if not prs.exists():
+            QMessageBox.warning(self, "No pressure preview",
+                                f"{prs} does not exist.\n\nBuild the previews first:\n"
+                                f"  python scripts/clean_pressure.py --subject {self.subject}")
+            return
+        self.take = take
+        self.rgb_video_path = self.rgb_video.load_video(str(rgb))
+        self.pressure_video_path = self.pressure_video.load_video(str(prs))
+        self._preload_existing_offset()
+        self._update_target_label()
+
+    def _preload_existing_offset(self):
+        """Start from the saved offset, if this take already has one."""
+        value = 0
+        if self.subject and self.take and offset_path_for(self.subject, self.take).exists():
+            try:
+                with open(offset_path_for(self.subject, self.take)) as f:
+                    value = int(json.load(f)["offset"])
+            except Exception:
+                pass
+        self.offset_slider.setValue(value)
+        self.offset_box.setValue(value)
+        self.offset = value
+
+    def _update_target_label(self):
+        if self.subject and self.take:
+            p = offset_path_for(self.subject, self.take)
+            state = "exists, saving will overwrite" if p.exists() else "not saved yet"
+            self.target_label.setText(f"Saves to: {_rel(p)}  ({state})")
+            self.setWindowTitle(f"Video Synchronization Tool - {self.subject} / {self.take}")
+        else:
+            self.target_label.setText("Saves to: (unknown - start with --subject/--take, or load an RGB "
+                                      "video from raw_data/Video/<Subject>/<take>_V1.mp4)")
 
     def init_ui(self):
         layout = QVBoxLayout()
+
+        if self.take_box is not None:
+            take_row = QHBoxLayout()
+            take_row.addWidget(QLabel(f"Subject: {self.subject}   Take:"))
+            take_row.addWidget(self.take_box, 1)
+            take_row.addWidget(QLabel("✓ = offset saved"))
+            layout.addLayout(take_row)
 
         video_layout = QHBoxLayout()
         video_layout.addWidget(self.rgb_video.group_box)
@@ -445,6 +569,7 @@ class VideoSyncApp(QWidget):
         layout.addLayout(video_layout)
         layout.addLayout(sync_layout)
         layout.addLayout(control_layout)
+        layout.addWidget(self.target_label)
         self.setLayout(layout)
 
     def set_offset(self, val):
@@ -452,6 +577,10 @@ class VideoSyncApp(QWidget):
 
     def load_rgb_video(self):
         self.rgb_video_path = self.rgb_video.load_video()
+        if self.rgb_video_path and self.take_box is None:
+            self.subject, self.take = self._infer_take(self.rgb_video_path)
+            self._preload_existing_offset()
+            self._update_target_label()
 
     def load_pressure_video(self):
         self.pressure_video_path = self.pressure_video.load_video()
@@ -500,19 +629,45 @@ class VideoSyncApp(QWidget):
             QMessageBox.warning(self, "Error", "Load both videos before saving sync.")
             return
 
+        if not (self.subject and self.take):
+            QMessageBox.warning(self, "Don't know where to save",
+                                "Could not tell which subject/take this is.\n\nStart the tool with\n"
+                                "  python syncher.py --subject <Subject> [--take <take>]\n"
+                                "or load the RGB video from raw_data/Video/<Subject>/<take>_V1.mp4.")
+            return
+
+        save_path = offset_path_for(self.subject, self.take)
         config = {
-            "rgb_video_path": self.rgb_video_path,
-            "pressure_video_path": self.pressure_video_path,
+            "subject": self.subject,
+            "take": self.take,
+            "rgb_video_path": _rel(self.rgb_video_path),
+            "pressure_video_path": _rel(self.pressure_video_path),
             "offset": self.offset,
             "rgb_video_fps": self.rgb_video.get_fps_info(),
             "pressure_fps": self.pressure_video.get_fps_info()
         }
 
-        save_path, _ = QFileDialog.getSaveFileName(self, "Save Config", filter="JSON Files (*.json)")
-        if save_path:
-            with open(save_path, 'w') as f:
-                json.dump(config, f, indent=2)
-            QMessageBox.information(self, "Success", f"Saved sync config to {save_path}")
+        if save_path.exists():
+            try:
+                with open(save_path) as f:
+                    old = json.load(f).get("offset")
+            except Exception:
+                old = "unreadable"
+            if old != self.offset:
+                answer = QMessageBox.question(
+                    self, "Overwrite offset?",
+                    f"{_rel(save_path)} already has offset {old}.\nReplace it with {self.offset}?",
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                if answer != QMessageBox.Yes:
+                    return
+
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(save_path, 'w') as f:
+            json.dump(config, f, indent=2)
+        if self.take_box is not None:
+            self._refresh_take_marks()
+        self._update_target_label()
+        QMessageBox.information(self, "Saved", f"Offset {self.offset} saved to {_rel(save_path)}")
 
     def load_sync_config(self):
         """Load a previously saved sync configuration"""
@@ -543,12 +698,19 @@ class VideoSyncApp(QWidget):
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--rgb", type=str, help="Path to RGB video")
-    parser.add_argument("--pressure", type=str, help="Path to pressure video")
+    parser = argparse.ArgumentParser(
+        description="Find the pressure/video sync offset of a take. "
+                    "Saves to raw_data/offsets/<subject>/<take>.json.")
+    parser.add_argument("--subject", type=str, help="Subject; shows a take picker (✓ = offset already saved)")
+    parser.add_argument("--take", type=str, help="Take to open first (e.g. OM3, 3, Pick-up)")
+    parser.add_argument("--view", default="V1", choices=["V1", "V2"], help="RGB view to sync against")
+    parser.add_argument("--rgb", type=str, help="(legacy) path to RGB video; subject/take inferred from it")
+    parser.add_argument("--pressure", type=str, help="(legacy) path to pressure video")
     args = parser.parse_args()
 
     app = QApplication(sys.argv)
-    win = VideoSyncApp(rgb_video_path=args.rgb, pressure_video_path=args.pressure)
+    win = VideoSyncApp(rgb_video_path=args.rgb, pressure_video_path=args.pressure,
+                       subject=args.subject, take=args.take,
+                       view=args.view)
     win.show()
     sys.exit(app.exec_())

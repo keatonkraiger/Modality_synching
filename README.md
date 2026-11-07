@@ -331,17 +331,24 @@ The `.mp4` is what you scrub against the RGB video in the next step.
 #### 3. Determine the sync offset (manual)
 
 ```bash
-python syncher.py \
-    --rgb      raw_data/Video/<Subject>/OM<i>_V1.mp4 \
-    --pressure work/Pressure/<Subject>/OM<i>/Original_Pressure.mp4
+python syncher.py --subject <Subject> [--take OM3] [--view V2]
 ```
 
-A PyQt window shows both streams side by side. Scrub, set the **offset (frames)**
-slider until an unambiguous event (a heel strike, a stomp) lines up, press
-*Test Offset Playback* to confirm, then *Save Sync Config*.
+A take picker lists every take with video (`✓` = offset already saved). Picking
+one loads `raw_data/Video/<Subject>/<take>_V1.mp4` and
+`work/Pressure/<Subject>/<take>/Original_Pressure.mp4` (built by step 2), and
+starts the slider at the saved offset if there is one. Scrub, set the
+**offset (frames)** slider until an unambiguous event (a heel strike, a stomp)
+lines up, press *Test Offset Playback* to confirm, then **Save offset**.
 
-Save to `raw_data/offsets/<Subject>/OM<i>.json` (a legacy `OM<i>_cfg.json` name is
-also accepted and renamed by step 8). The file looks like:
+There is no save dialog: the offset always goes to
+`raw_data/offsets/<Subject>/<take>.json` (shown at the bottom of the window), and
+replacing a different saved value asks first. The old
+`--rgb <video> --pressure <video>` form still works when the RGB path is under
+`raw_data/Video/<Subject>/`, since the subject and take are read from it.
+Step 8 also accepts a legacy `<take>_cfg.json` name and renames it. After syncing,
+upload with `python scripts/sync_onedrive.py push raw --subjects <Subject> --kinds offsets --yes`.
+The file looks like:
 
 ```json
 {
