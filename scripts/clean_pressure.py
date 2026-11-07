@@ -7,6 +7,9 @@ import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy import ndimage
 from scipy.ndimage import median_filter
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import RAW_PRESSURE, WORK_PRESSURE  # noqa: E402
 
 def load_tekscan_csv(filepath, skip_header_lines=31, rows=60, cols=21):
     frames = []
@@ -249,9 +252,16 @@ def process_all_enhanced(data_dir, save_dir=None, min_val=10, max_val=862,
 # Example usage with enhanced cleaning
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process pressure data")
-    parser.add_argument("--data_dir", type=str, required=True, help="Path to the data directory")
-    parser.add_argument("--save_dir", type=str, required=True, help="Path to the save directory")
+    parser.add_argument("--subject", type=str, default=None,
+                        help="Subject name; sets --data_dir raw_data/Pressure/<S> and --save_dir work/Pressure/<S>")
+    parser.add_argument("--data_dir", type=str, default=None, help="Path to the data directory")
+    parser.add_argument("--save_dir", type=str, default=None, help="Path to the save directory")
     args = parser.parse_args()
+    if args.subject:
+        args.data_dir = args.data_dir or os.path.join(RAW_PRESSURE, args.subject)
+        args.save_dir = args.save_dir or os.path.join(WORK_PRESSURE, args.subject)
+    if not args.data_dir or not args.save_dir:
+        parser.error("give --subject, or both --data_dir and --save_dir")
 
     data_dir = args.data_dir
     save_dir = args.save_dir

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Interactive faulty sensor annotator.
-Stores all annotations in one global file: post_processing_output/faulty_sensors.json
+Stores all annotations in one global file: raw_data/faulty_sensors.json (data_paths.FAULTY_SENSORS)
 
 Usage:
     python post_processing/2_find_faulty_sensors.py --subject Kyle --om OM1 --frame 221
@@ -14,6 +14,9 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import WORK_PRESSURE, FAULTY_SENSORS  # noqa: E402
 
 plt.rcParams["toolbar"] = "None"  # cleaner GUI window
 
@@ -50,7 +53,7 @@ def merge_faulty(existing, new):
 
 # -------------------- Core Functions --------------------
 
-def load_pressure(subject, om, base_dir="untrimmed/Pressure"):
+def load_pressure(subject, om, base_dir=WORK_PRESSURE):
     path = os.path.join(base_dir, subject, om, "Original_Pressure.npy")
     if not os.path.exists(path):
         raise FileNotFoundError(f"Pressure file not found: {path}")
@@ -143,7 +146,8 @@ def main():
     parser.add_argument("--subject", type=str, required=True)
     parser.add_argument("--om", type=str, required=True)
     parser.add_argument("--frame", type=int, required=True)
-    parser.add_argument("--base_dir", type=str, default="untrimmed/Pressure")
+    parser.add_argument("--base_dir", type=str, default=WORK_PRESSURE)
+    parser.add_argument("--labels", type=str, default=FAULTY_SENSORS, help="faulty-sensor JSON to read and update")
     parser.add_argument("--no-show-prev", dest="show_prev", action="store_false",
                         help="Disable showing previously labeled sensors in red.")
     parser.add_argument("--vmax", type=float, default=None,
@@ -157,7 +161,7 @@ def main():
     print(f"Displaying frame {args.frame}. Click sensors to toggle faulty. Press 'q' to save and quit.")
 
     # Load existing JSON
-    json_path = os.path.join("post_processing_output", "faulty_sensors.json")
+    json_path = str(args.labels)
     data = load_json(json_path)
 
     # ------------------------------------------------------------------

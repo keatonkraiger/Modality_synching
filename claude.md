@@ -1,12 +1,25 @@
 
+## Data layout in one paragraph
+
+Paths live in `data_paths.py`; never hardcode them in a script. `raw_data/` and
+`Complete/` are mirrored to `onedrive:Datasets/OrdinaryMovements/` with
+`scripts/sync_onedrive.py` (rclone copy, dry run unless `--yes`, never deletes).
+`work/` (was `untrimmed/` + top-level `Model_output/` + unzipped OpenPose) and
+`qc/` (was `post_processing_output/` + `manual_check/`) are local and regenerable.
+**Anything a human makes goes in `raw_data/`**: offsets, `faulty_sensors.json`,
+`subject_info.json`. OpenPose is stored as `raw_data/openpose/<S>/OM<i>.zip` and
+extracted into `work/openpose/` by `format_OP_jsons.py` on demand.
+
 ## Known issues and gotchas
 
 - **`Complete/*/Pressure.npy` is not the recorded data for any subject.** The old
   stage D3 was run with `--save-cleaned` on every subject (Keaton included, whose
   labels were never written to `faulty_sensors.json`), so the hand-labelled cells in
   `Complete/` are already their 3×3 neighbour mean. The pristine arrays are
-  `untrimmed/Pressure/<Subject>/OM<i>/Original_Pressure.npy`; stage D4 reads those
-  and re-applies the `combine_all.py` offset cut itself.
+  `work/Pressure/<Subject>/OM<i>/Original_Pressure.npy`; stage D4 reads those
+  and re-applies the `combine_all.py` offset cut itself. Re-running step 8 now
+  rebuilds the true recording (checked on Keaton OM2: only the 2 D3-repaired
+  sensels differ; every other stream is byte-identical).
 - **The rows-14–17 band that reads zero on both feet of every subject is not a dead
   strip.** It is the toe-crease region, which is simply lightly loaded (max ~40–90
   units over a whole session, neighbours in rows 13/18 also low). Any dead-sensel
@@ -17,12 +30,14 @@
   its inner neighbours; D4 reports these as `suspect` but does not repair them by
   default (`--hot_gain` lowers the bar if you want them).
 - **`combine_all.py`'s `CoM_inst` branch never fires.** It looks for
-  `untrimmed/Model_output/<Subject>/<OM>/CoM_inst.npy`, but stage C writes
+  `work/Model_output/<Subject>/<OM>/CoM_inst.npy`, but stage C writes
   instantaneous CoM straight to `Complete/`. The branch is vestigial; the working
   path is `instant_com.py --inst-save-root Complete`.
-- **`convert_model_output.py` hardcodes `raw_data/offsets`** — it takes no
-  `--offsets_dir` flag, unlike `combine_all.py`. If you keep offsets elsewhere,
-  the two stages will disagree.
+- **D4's `--oms` also restricts detection**, not just which takes are written.
+  `process_subject()` filters the take list before pooling, so
+  `--subjects Keaton --oms OM2` flags cells from OM2 alone and gives a different
+  `Pressure_clean.npy` than a full run. Run without `--oms` to reproduce
+  `Complete/`.
 - **`faulty_sensors.json` keys are case-inconsistent** — Kyle uses `OM0`, Varad and
   Abhinav use `om0`. Repair unions across all keys so this is harmless today, but
   re-annotating a lowercase take through D1 will create a second, uppercase entry
@@ -40,7 +55,8 @@
 - **`min_val=9` zeroes light contact.** Anything under 10 in the raw Tekscan units
   is discarded in step 1 and cannot be recovered without re-parsing the CSVs.
 - **Step 0 is destructive.** `convert_all_fps.py` deletes and replaces the source
-  video. Back up `raw_data/Video/` first.
+  video. Back up `raw_data/Video/` first. It is the only script that writes
+  into `raw_data/`; run it before pushing a new subject's videos.
 - **`triangulate_oms.py`'s non-standard-resolution handling is half-applied.**
   `subject_broken_takes` (Spencer OM0, Abhinav OM11, and Varad OM1/3/8/9/10/12)
   marks takes recorded at 1279×720 instead of 1920×1080. For those, the intrinsics
@@ -49,8 +65,13 @@
   in 719p (in which case this is correct and the `scale_*` machinery is just dead)
   or they are not (in which case those takes' 2D is wrong). Verify the actual
   resolution of those videos before trusting their `BODY24_3D.npy`.
-- **`OrdinaryMovements/` is maintained by hand.** No script in this repo produces
-  or updates it; it is a copy of `Complete/` with the videos removed.
+- **A fresh step 8 does not reproduce `Complete/*/Video_V*.mp4` byte for byte**
+  (checked on Keaton OM2; cause not investigated — likely a different OpenCV/codec
+  build when they were made). It is deterministic run to run in the current
+  environment, and all `.npy` streams other than D3-touched `Pressure.npy` match
+  exactly.
+- **`Complete/` predates `manifest.json`.** No take in it has one yet; they appear
+  the next time step 8 is run for that subject.
 
 ---
 
@@ -72,8 +93,8 @@ python post_processing/1_generate_pressure_viz.py \
     [--max_frames 1000] [--append raw]
 ```
 
-Writes `post_processing_output/<Subject>/pressure_viz/OM<i>_pressure.mp4` from
-`untrimmed/Pressure/`. Colour scale is capped at the 99th percentile so a single
+Writes `qc/pressure/<Subject>/pressure_viz/OM<i>_pressure.mp4` from
+`work/Pressure/`. Colour scale is capped at the 99th percentile so a single
 stuck cell doesn't flatten the whole map. Watch these and note, for each take, a
 frame number where a suspicious cell is clearly lit.
 
@@ -88,7 +109,7 @@ Shows that frame for both feet. **Left-click toggles a cell**; already-labelled
 cells (the union across every OM of this subject) are outlined in red on open.
 Press **`q`** to save and quit.
 
-Appends to `post_processing_output/faulty_sensors.json`:
+Appends to `raw_data/faulty_sensors.json` (push it to OneDrive afterwards):
 
 ```json
 { "<Subject>": { "OM<i>": { "left": [[y, x], ...], "right": [[y, x], ...] } } }
@@ -114,7 +135,7 @@ Builds the union mask over all of the subject's OMs and, for every
 of its 3×3 spatial neighbours — **excluding other faulty cells**, so two adjacent
 dead sensors don't launder each other's values. The correction is purely spatial;
 no temporal smoothing is applied. Cleaned previews go to
-`post_processing_output/<Subject>/cleaned_pressure_viz/`.
+`qc/pressure/<Subject>/cleaned_pressure_viz/`.
 
 `--save-cleaned` **overwrites `Pressure.npy` in place with no backup.** The
 neighbour-mean repair is idempotent (re-running it is a no-op), so a repeat run is
@@ -136,11 +157,11 @@ python post_processing/4_clean_pressure.py --all
 ```
 
 Supersedes D1–D3 for the repair itself (D2's hand labels are still merged in).
-Reads the pristine `untrimmed/.../Original_Pressure.npy`, applies the same offset
+Reads the pristine `work/Pressure/.../Original_Pressure.npy`, applies the same offset
 cut as `combine_all.py`, and writes **`Complete/<Subject>/OM<i>/Pressure_clean.npy`**
 next to the untouched `Pressure.npy`. Takes about 3 min per subject; detection
-pools every take of the subject (same insoles all session), so `--oms` only
-restricts which takes are written.
+pools every take of the subject (same insoles all session). Note that `--oms`
+narrows that pool too (see the gotcha above), so use it only for quick looks.
 
 Three fault classes, thresholds calibrated on the hand labels and all CLI-tunable:
 
@@ -162,7 +183,7 @@ active cell with no active valid neighbour is zeroed (`--keep_isolated` disables
 this). `NaN` is preserved exactly and nothing temporal is applied, so the result
 is idempotent and frame-aligned with `Pressure.npy`.
 
-Outputs in `post_processing_output/<Subject>/pressure_clean/`:
+Outputs in `qc/pressure/<Subject>/pressure_clean/`:
 
 - `summary.png` — gain / dead / isolated-activity maps and the repaired-cell map
 - `OM<i>_cop.png` — per-foot CoP row/col and total load, before vs after
@@ -176,13 +197,13 @@ Outputs in `post_processing_output/<Subject>/pressure_clean/`:
 
 ### Ordering
 
-Stage D edits `Complete/` directly, not `untrimmed/`. **Re-running step 8
-(`combine_all.py`) regenerates `Pressure.npy` from `untrimmed/` and silently
+Stage D edits `Complete/` directly, not `work/`. **Re-running step 8
+(`combine_all.py`) regenerates `Pressure.npy` from `work/` and silently
 discards the D3 repair** (D4's `Pressure_clean.npy` is a separate file and
 survives, but re-run D4 anyway if the offsets changed). `faulty_sensors.json` is
 persistent, so D3 or D4 alone is enough.
 
-Note also that D1 renders from `untrimmed/` (uncut) while D3 renders from
+Note also that D1 renders from `work/` (uncut) while D3 renders from
 `Complete/` (offset-cut), so the "before" and "after" videos are not on the same
 frame numbering.
 
@@ -207,14 +228,14 @@ footer prints the live per-foot CoP shift in sensels.
 Frames are written one at a time as JPEGs to `<out>.frames/` and muxed with ffmpeg,
 then deleted, so memory stays flat regardless of take length. `--keep_frames` keeps
 them. Output defaults to
-`post_processing_output/<Subject>/pressure_clean/<OM>_compare_<view>.mp4`.
+`qc/pressure/<Subject>/pressure_clean/<OM>_compare_<view>.mp4`.
 
 **Choose the "before" array deliberately.** `--old_source complete` (the default)
 compares against `Complete/.../Pressure.npy`, which for any hand-labelled cell is
 already the old D3 output, not the recording — for Varad OM11 that comparison is
 nearly blank because D3 had already fixed the two worst ghost sensels. Use
 `--old_source original` for the true before/after against
-`untrimmed/.../Original_Pressure.npy`.
+`work/Pressure/.../Original_Pressure.npy`.
 
 ```bash
 python viz/construct_viz.py --name <Subject> [--oms OM1 OM3] [--use_inst_com] \
@@ -222,7 +243,7 @@ python viz/construct_viz.py --name <Subject> [--oms OM1 OM3] [--use_inst_com] \
 ```
 
 First re-verifies that all eight `.npy` files and both videos in the take have
-matching frame counts, then renders into `manual_check/<Subject>/OM<i>/`:
+matching frame counts, then renders into `qc/manual_check/<Subject>/OM<i>/`:
 
 - `pressure.mp4` — both feet
 - `3D_joints.mp4` — BODY25 3D skeleton + CoM + floor projection

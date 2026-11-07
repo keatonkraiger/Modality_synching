@@ -19,6 +19,9 @@ import matplotlib.pyplot as plt
 from matplotlib import animation
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import scipy.ndimage as ndi
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import COMPLETE, QC_PRESSURE, FAULTY_SENSORS  # noqa: E402
 
 # ---------------------------------------------------------------------
 # Helper functions
@@ -201,13 +204,13 @@ def run_cleaning_all(subject, create_video=False, save_cleaned=False, fps=50, ma
     Run the smoothing-based correction for all OMs of a subject
     using the union of all faulty sensors.
     """
-    json_path = os.path.join("post_processing_output", "faulty_sensors.json")
+    json_path = str(FAULTY_SENSORS)
     faulty_data = load_json(json_path)
     if subject not in faulty_data:
         print(f"[!] No faulty sensor data found for {subject} in {json_path}")
         return
 
-    subj_dir = os.path.join("Complete", subject)
+    subj_dir = os.path.join(COMPLETE, subject)
     if not os.path.exists(subj_dir):
         print(f"[!] Subject directory not found: {subj_dir}")
         return
@@ -217,7 +220,7 @@ def run_cleaning_all(subject, create_video=False, save_cleaned=False, fps=50, ma
         print(f"[!] No OM directories found in {subj_dir}")
         return
 
-    output_dir = os.path.join("post_processing_output", subject, "cleaned_pressure_viz")
+    output_dir = os.path.join(QC_PRESSURE, subject, "cleaned_pressure_viz")
     ensure_dir(output_dir)
 
     # Get representative shape from the first OM

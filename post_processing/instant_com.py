@@ -1,6 +1,9 @@
 import argparse
 import os
 import re
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import VICON_FULL, COMPLETE, COM_COMPARISON  # noqa: E402
 from glob import glob
 
 import numpy as np
@@ -346,9 +349,9 @@ def om_filter_pass(name, allowed):
 
 def main():
     parser = argparse.ArgumentParser(description="Compute OM instantaneous CoM and compare to GT/model CoM.npy")
-    parser.add_argument("--model-root", default="Model_output")
-    parser.add_argument("--gt-root", default="/mnt/e/Data/OMs/construct_complete/Summer25_OMs/Complete")
-    parser.add_argument("--save-dir", default="om_comparison")
+    parser.add_argument("--model-root", default=VICON_FULL)
+    parser.add_argument("--gt-root", default=COMPLETE)
+    parser.add_argument("--save-dir", default=COM_COMPARISON)
     parser.add_argument(
         "--inst-save-root",
         default=None,

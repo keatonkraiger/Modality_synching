@@ -7,6 +7,9 @@ import json
 import os
 import pandas as pd
 from collections import OrderedDict
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import RAW, WORK  # noqa: E402
 
 def create_com_animation(com_data, com_floor_data, title="CoM Animation", save_path=None, N_frames=None):
     """
@@ -354,8 +357,8 @@ import os
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extract and consolidate Vicon Model Output JSON files")
     parser.add_argument('--person', type=str, default='Kyle', help="Person name (e.g., 'Kyle')")
-    parser.add_argument('--raw_data_dir', type=str, default='raw_data', help="Directory containing raw data")
-    parser.add_argument('--out_dir', type=str, default='untrimmed', help="Output directory for consolidated data")
+    parser.add_argument('--raw_data_dir', type=str, default=RAW, help="Directory containing raw data")
+    parser.add_argument('--out_dir', type=str, default=WORK, help="Output directory for consolidated data")
     parser.add_argument('--no_world_fix', action='store_true', help="If set, do not apply Rz(-90) transformation to data")
     parser.add_argument('--specific_oms', nargs='+', type=int, default=None, help="List of specific OM indices to process (e.g., --specific_oms 1 2 3)")
     args = parser.parse_args()

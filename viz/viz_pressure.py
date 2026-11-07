@@ -1,9 +1,13 @@
+import os
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
 # Load data
-data = np.load('/mnt/e/Data/OMs/construct_complete/Complete/Keaton/OM2/Pressure.npy')  # Shape: (N, 60, 21, 2)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import COMPLETE  # noqa: E402
+data = np.load(os.path.join(COMPLETE, 'Keaton', 'OM2', 'Pressure.npy'))  # Shape: (N, 60, 21, 2)
 N = data.shape[0]
 
 # Concatenate left and right foot horizontally

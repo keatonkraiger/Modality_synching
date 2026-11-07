@@ -1,5 +1,10 @@
+import argparse
 import shutil
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from data_paths import WORK_OPENPOSE  # noqa: E402
 
 def reformat_openpose_dirs(base_dir):
     """
@@ -50,5 +55,11 @@ def reformat_openpose_dirs(base_dir):
     print("✅ Done! All OpenPose JSON directories reformatted.\n")
 
 if __name__ == "__main__":
-    base_dir = "/mnt/e/Data/OMs/construct_complete/raw_data/openpose_output/Spencer"
+    ap = argparse.ArgumentParser(description="Rename OpenPose output OM<i>/json/Video_V*/ to OM<i>/OM<i>_V*_jsons/ in place.")
+    ap.add_argument("--subject", help="Shorthand for --base_dir work/openpose/<S>")
+    ap.add_argument("--base_dir", help="Folder holding the OM<i>/ directories")
+    a = ap.parse_args()
+    base_dir = a.base_dir or (WORK_OPENPOSE / a.subject if a.subject else None)
+    if base_dir is None:
+        ap.error("give --subject or --base_dir")
     reformat_openpose_dirs(base_dir)

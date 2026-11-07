@@ -3,6 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib import animation
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import WORK_PRESSURE  # noqa: E402
 
 # ----------------- Helper Functions -----------------
 
@@ -190,7 +193,7 @@ import argparse
 # ----------------- Example Usage -----------------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Detect and correct faulty pressure sensors in pressure mat data.")
-    parser.add_argument("--data_dir", default="untrimmed/Pressure",
+    parser.add_argument("--data_dir", default=WORK_PRESSURE,
                     help="Directory containing pressure data")
     parser.add_argument('--subject', type=str, required=True, help="Subject name (e.g., 'Keaton')")
     parser.add_argument('--remove_faulty', action='store_true', help="Whether to remove faulty sensors")

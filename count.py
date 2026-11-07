@@ -110,7 +110,8 @@ def generate_latex_table(om_counts, om_names, include_missing=True, outfile=None
 # Example usage:
 # --------------------
 if __name__ == "__main__":
-    root = "Complete"   # <--- set this to your top-level directory
+    from data_paths import COMPLETE
+    root = str(COMPLETE)   # <--- set this to your top-level directory
     om_counts = count_om_frames(root)
     latex_table = generate_latex_table(om_counts, om_names, include_missing=True, outfile="om_table.tex")
     print(latex_table)

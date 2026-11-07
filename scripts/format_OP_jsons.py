@@ -4,6 +4,10 @@ import json
 import numpy as np
 import cv2
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from data_paths import RAW, WORK, RAW_OPENPOSE, WORK_OPENPOSE  # noqa: E402
+from openpose_zip import unpack_subject  # noqa: E402
 
 def count_video_frames(video_path: str) -> int:
     """Return number of frames in a video using OpenCV."""
@@ -26,7 +30,8 @@ def load_openpose_json(json_path: str) -> np.ndarray:
     arr = np.array(keypoints, dtype=np.float32).reshape((-1, 3))  # (25, 3)
     return arr
 
-def process_subject(raw_data_dir: str, name: str, output_dir: str, specific_oms=None):
+def process_subject(raw_data_dir: str, name: str, output_dir: str, specific_oms=None,
+                    openpose_root=WORK_OPENPOSE, openpose_zips=RAW_OPENPOSE):
     """
     Process one subject's OpenPose data.
     
@@ -35,9 +40,12 @@ def process_subject(raw_data_dir: str, name: str, output_dir: str, specific_oms=
         name: Subject name (e.g., 'Kyle', 'Keaton')
         output_dir: Output directory for BODY25 .npy files
         specific_oms: List of specific OM indices to process (e.g., [1, 3, 5])
+        openpose_root: Unzipped OpenPose JSONs, <root>/<name>/OM<i>/OM<i>_V*_jsons/
+        openpose_zips: Per-take zips; any take missing from openpose_root is extracted from here
     """
     # Paths
-    openpose_dir = Path(raw_data_dir) / "openpose_output" / name
+    unpack_subject(name, openpose_zips, openpose_root, oms=specific_oms)
+    openpose_dir = Path(openpose_root) / name
     video_dir = Path(raw_data_dir) / "Video" / name
     
     if not openpose_dir.exists():
@@ -141,18 +149,23 @@ def process_subject(raw_data_dir: str, name: str, output_dir: str, specific_oms=
 
 def main():
     parser = argparse.ArgumentParser(description="Convert OpenPose JSONs to BODY25 .npy files")
-    parser.add_argument("--raw_data_dir", type=str, default='raw_data',
-                        help="Root directory containing raw data (with openpose_output/ and Video/ subdirs)")
+    parser.add_argument("--raw_data_dir", type=str, default=RAW,
+                        help="Root directory containing raw data (with Video/ subdir)")
+    parser.add_argument("--openpose_dir", type=str, default=WORK_OPENPOSE,
+                        help="Unzipped OpenPose JSONs (<dir>/<name>/OM<i>/OM<i>_V*_jsons/)")
+    parser.add_argument("--openpose_zips", type=str, default=RAW_OPENPOSE,
+                        help="Per-take OpenPose zips, extracted into --openpose_dir when missing")
     parser.add_argument("--name", type=str, required=True,
                         help="Subject name (e.g., 'Kyle', 'Keaton')")
-    parser.add_argument("--output_dir", type=str, default="untrimmed",
+    parser.add_argument("--output_dir", type=str, default=WORK,
                         help="Output directory (will create BODY25/name/OM<idx>/ structure)")
     parser.add_argument('--specific_oms', nargs='+', default=None, type=int,
                         help="Process only specific OM directories (e.g., 1 3 for OM1 and OM3)")
     args = parser.parse_args()
     
     try:
-        process_subject(args.raw_data_dir, args.name, args.output_dir, specific_oms=args.specific_oms)
+        process_subject(args.raw_data_dir, args.name, args.output_dir, specific_oms=args.specific_oms,
+                        openpose_root=args.openpose_dir, openpose_zips=args.openpose_zips)
         print("\n✓ Processing complete!")
     except ValueError as e:
         print(f"\n✗ Processing failed: {e}")

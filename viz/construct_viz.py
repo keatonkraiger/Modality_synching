@@ -3,6 +3,9 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import argparse
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import COMPLETE, MANUAL_CHECK  # noqa: E402
 from glob import glob
 import numpy as np
 import subprocess
@@ -440,8 +443,8 @@ def construct_final(video_paths, save_path, frames_to_save=None, fps=50):
   
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_path', type=str, default='Complete')
-    parser.add_argument('--save_path', type=str, default='manual_check')
+    parser.add_argument('--data_path', type=str, default=COMPLETE)
+    parser.add_argument('--save_path', type=str, default=MANUAL_CHECK)
     parser.add_argument('--name', type=str, required=True, help="Subject name (e.g., 'Keaton')")
     parser.add_argument('--oms', type=str, nargs='+', default=['all'])
     parser.add_argument('--skip_step', type=str, nargs='+', default=[], choices=['pressure', 'skeleton', 'markers', 'collage'])

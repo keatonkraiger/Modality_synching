@@ -5,6 +5,9 @@ import argparse
 import cv2
 from pathlib import Path
 from collections import OrderedDict
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import RAW, WORK, OFFSETS, COMPLETE, VICON_FULL  # noqa: E402
 
 # -------------------------------------------------------------------------
 # 1. Helper Functions
@@ -204,14 +207,15 @@ def slice_structure(content, start, end):
 # 4. Main Process
 # -------------------------------------------------------------------------
 
-def process_subject(raw_data_dir, untrimmed_dir, name, save_root, offsets_dir, specific_oms=None,
+def process_subject(raw_data_dir, work_dir, name, save_root, offsets_dir, specific_oms=None,
+                    complete_dir=COMPLETE,
                     apply_transform=True):
     
     # Setup Paths
     raw_json_dir = Path(raw_data_dir) / "Model_output" / name
-    body25_dir = Path(untrimmed_dir) / "BODY25" / name
+    body25_dir = Path(work_dir) / "BODY25" / name
     video_dir = Path(raw_data_dir) / "Video" / name
-    pressure_dir = Path(untrimmed_dir) / "Pressure" / name
+    pressure_dir = Path(work_dir) / "Pressure" / name
     
     if not body25_dir.exists():
         print(f"  [Error] BODY25 directory not found at {body25_dir}. Skipping subject.")
@@ -360,7 +364,7 @@ def process_subject(raw_data_dir, untrimmed_dir, name, save_root, offsets_dir, s
         final_data = slice_structure(resampled_content, others_start, others_end)
         take_com = final_data['model_output']['CentreOfMass']['data']
        
-        comp_com_path = Path('Complete') / name / om_idx / 'CoM.npy'
+        comp_com_path = Path(complete_dir) / name / om_idx / 'CoM.npy'
         if comp_com_path.exists():
             comp_com = np.load(comp_com_path)
             assert len(take_com) == len(comp_com), f"Length mismatch in CoM for {name} {om_idx}"
@@ -386,8 +390,12 @@ def process_subject(raw_data_dir, untrimmed_dir, name, save_root, offsets_dir, s
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--persons', nargs='+', type=str, default=['Keaton', 'Kyle', 'Varad', 'Abhinav', 'Spencer'], help="Person name(s)")
-    parser.add_argument('--raw_data_dir', type=str, default='raw_data', help="Directory containing raw data")
-    parser.add_argument('--out_dir', type=str, default='Model_output', help="Output directory")
+    parser.add_argument('--raw_data_dir', type=str, default=RAW, help="Directory containing raw data")
+    parser.add_argument('--work_dir', '--untrimmed_dir', dest='work_dir', default=WORK,
+                        help="Directory containing BODY25/ and Pressure/ (used for stream lengths)")
+    parser.add_argument('--offsets_dir', default=OFFSETS, help="Directory containing offset JSON files")
+    parser.add_argument('--complete_dir', default=COMPLETE, help="Synced output to cross-check CoM against")
+    parser.add_argument('--out_dir', type=str, default=VICON_FULL, help="Output directory")
     parser.add_argument('--no_world_fix', action='store_true', help="Do not apply Rz(-90)")
     parser.add_argument('--specific_oms', nargs='+', type=int, default=None)
     args = parser.parse_args()
@@ -399,10 +407,11 @@ if __name__ == "__main__":
 
         process_subject(
             raw_data_dir=args.raw_data_dir,
-            untrimmed_dir='untrimmed', # Assumed based on previous context
+            work_dir=args.work_dir,
             name=person,
             save_root=args.out_dir,
-            offsets_dir='raw_data/offsets',
+            offsets_dir=args.offsets_dir,
+            complete_dir=args.complete_dir,
             specific_oms=args.specific_oms,
             apply_transform=not args.no_world_fix
         )

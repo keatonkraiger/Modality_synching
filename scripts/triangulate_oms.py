@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.animation import FuncAnimation
 from glob import glob
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import WORK_BODY25, RAW_XCPS  # noqa: E402
 
 def _check_keys(d):
     """Convert mat_struct objects to dicts."""
@@ -505,8 +508,8 @@ print_comparison = False
 import argparse 
 def main():
     parser = argparse.ArgumentParser(description="Triangulate BODY25 3D poses from 2D OpenPose data")
-    parser.add_argument("--body25_dir", type=str, default='untrimmed/BODY25', help="Directory containing BODY25 NPY files and videos")
-    parser.add_argument("--xcp_dir", type=str, default='raw_data/XCPs', help="Directory containing camera parameter XCP files")
+    parser.add_argument("--body25_dir", type=str, default=WORK_BODY25, help="Directory containing BODY25 NPY files and videos")
+    parser.add_argument("--xcp_dir", type=str, default=RAW_XCPS, help="Directory containing camera parameter XCP files")
     parser.add_argument('--subjects', type=str, nargs='+', required=True, help="List of subjects to process")
     parser.add_argument('--animate', action='store_true', help="Whether to animate the 3D poses")
     parser.add_argument('--specific_oms', type=str, nargs='+', default=[], help="Specific OM takes to process (e.g., OM1, OM2)")

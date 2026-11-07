@@ -10,6 +10,9 @@ import matplotlib.animation as animation
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pathlib import Path
 import argparse
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import WORK_PRESSURE, QC_PRESSURE  # noqa: E402
 
 def save_pressure_video(data, output_path, fps=50, max_frames=None):
     """
@@ -124,9 +127,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Generate pressure visualization videos for all subjects"
     )
-    parser.add_argument("--data_dir", default="untrimmed/Pressure",
+    parser.add_argument("--data_dir", default=WORK_PRESSURE,
                        help="Directory containing pressure data")
-    parser.add_argument("--output_dir", default="post_processing_output",
+    parser.add_argument("--output_dir", default=QC_PRESSURE,
                        help="Directory to save visualizations")
     parser.add_argument("--subjects", nargs="+", required=True,
                        help="List of subjects to process")

@@ -4,6 +4,10 @@ import numpy as np
 import cv2
 from pathlib import Path
 import argparse
+import shutil
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import RAW, WORK, COMPLETE, OFFSETS, SUBJECT_INFO, COMPLETE_SUBJECT_INFO_NAME  # noqa: E402
 
 def upsample_linear(data):
     """Upsample data by 2x using linear interpolation.
@@ -52,22 +56,22 @@ def trim_video(input_path, output_path, start, end):
     cap.release()
     out.release()
 
-def process_subject(raw_data_dir, untrimmed_dir, name, save_root, offsets_dir, specific_oms=None):
+def process_subject(raw_data_dir, work_dir, name, save_root, offsets_dir, specific_oms=None):
     """
     Combine all multimodal data for a subject.
     
     Args:
         raw_data_dir: Directory containing raw Video files
-        untrimmed_dir: Directory containing BODY25, Pressure, Model_output
+        work_dir: Directory containing BODY25, Pressure, Model_output
         name: Subject name
         save_root: Output directory for combined data
         offsets_dir: Directory containing offset JSON files
     """
     # Input directories
     video_dir = Path(raw_data_dir) / "Video" / name
-    body25_dir = Path(untrimmed_dir) / "BODY25" / name
-    pressure_dir = Path(untrimmed_dir) / "Pressure" / name
-    vicon_data_dir = Path(untrimmed_dir) / "Model_output" / name
+    body25_dir = Path(work_dir) / "BODY25" / name
+    pressure_dir = Path(work_dir) / "Pressure" / name
+    vicon_data_dir = Path(work_dir) / "Model_output" / name
     
     # Get all OM directories from BODY25 (since that's where we know processed data exists)
     om_dirs = sorted([d for d in body25_dir.iterdir() if d.is_dir() and d.name.startswith("OM")])
@@ -349,22 +353,28 @@ def process_subject(raw_data_dir, untrimmed_dir, name, save_root, offsets_dir, s
 
 def main():
     parser = argparse.ArgumentParser(description="Trim and align multimodal motion capture data")
-    parser.add_argument("--raw_data_dir", default='raw_data', 
+    parser.add_argument("--raw_data_dir", default=RAW, 
                         help="Directory containing raw Video files")
-    parser.add_argument("--untrimmed_dir", default='untrimmed',
+    parser.add_argument("--work_dir", "--untrimmed_dir", dest="work_dir", default=WORK,
                         help="Directory containing BODY25/Pressure/Model_output")
     parser.add_argument("--name", required=True, 
                         help="Subject name (e.g., 'Kyle', 'Keaton')")
-    parser.add_argument("--save_root", default='Complete', 
+    parser.add_argument("--save_root", default=COMPLETE, 
                         help="Output directory for combined synced data")
-    parser.add_argument("--offsets_dir", default='raw_data/offsets', 
+    parser.add_argument("--offsets_dir", default=OFFSETS, 
                         help="Directory containing offset JSON files")
     parser.add_argument('--specific_oms', nargs='+', default=None, type=int, 
                         help="Process only specific OM directories (e.g., OM1 OM3)")
     args = parser.parse_args()
     
-    process_subject(args.raw_data_dir, args.untrimmed_dir, args.name, 
+    process_subject(args.raw_data_dir, args.work_dir, args.name, 
                    args.save_root, args.offsets_dir, specific_oms=args.specific_oms)
+
+    # Ship the hand-maintained subject metadata with the release.
+    if Path(SUBJECT_INFO).exists():
+        dst = Path(args.save_root) / COMPLETE_SUBJECT_INFO_NAME
+        shutil.copyfile(SUBJECT_INFO, dst)
+        print(f"Copied {SUBJECT_INFO} -> {dst}")
 
 if __name__ == "__main__":
     main()

@@ -1,4 +1,7 @@
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import COMPLETE  # noqa: E402
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
@@ -116,7 +119,7 @@ def animate_skeleton_and_com(body25, com, com_floor, n_frames=None, threshold=0.
 
 # --- Example run for one OM dir ---
 if __name__=="__main__":
-    om_dir = "Complete/Keaton/OM2"   # just one dir for now
+    om_dir = os.path.join(COMPLETE, "Keaton", "OM2")   # just one dir for now
     body25 = np.load(os.path.join(om_dir,"BODY25_3D.npy"))
     com = np.load(os.path.join(om_dir,"CoM.npy"))
     com_floor = np.load(os.path.join(om_dir,"CoM_floor.npy"))

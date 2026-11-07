@@ -4,16 +4,16 @@
 Stage D2 -- automatic pressure-sensel repair (replaces the hand-label-only D3).
 
 Reads the pristine per-take arrays
-    untrimmed/Pressure/<Subject>/OM<i>/Original_Pressure.npy
+    work/Pressure/<Subject>/OM<i>/Original_Pressure.npy
 applies the same offset cut as scripts/combine_all.py, detects faulty sensels
 per subject (statistics pooled over every take of that subject, because the
 same physical insoles were worn for the whole session), repairs them, and writes
 
     Complete/<Subject>/OM<i>/Pressure_clean.npy      (new file; Pressure.npy is never touched)
 
-plus a report under post_processing_output/<Subject>/pressure_clean/.
+plus a report under qc/pressure/<Subject>/pressure_clean/.
 
-Fault classes (all detected automatically, all merged with faulty_sensors.json):
+Fault classes (all detected automatically, all merged with raw_data/faulty_sensors.json):
 
   hot       reads >= --hot-gain times the mean of its *active* neighbours whenever
             it is loaded (median ratio over the pooled frames).  These are
@@ -47,6 +47,8 @@ import sys
 import json
 import argparse
 from pathlib import Path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import COMPLETE, WORK, OFFSETS, QC_PRESSURE, FAULTY_SENSORS  # noqa: E402
 
 import numpy as np
 import matplotlib
@@ -76,9 +78,9 @@ def load_offset(offsets_dir, subject, om):
         return int(json.load(f)["offset"])
 
 
-def aligned_original(subject, om, untrimmed_dir, complete_dir, offsets_dir):
+def aligned_original(subject, om, work_dir, complete_dir, offsets_dir):
     """Original_Pressure.npy cut exactly like combine_all.py cuts Pressure.npy."""
-    src = Path(untrimmed_dir) / "Pressure" / subject / om / "Original_Pressure.npy"
+    src = Path(work_dir) / "Pressure" / subject / om / "Original_Pressure.npy"
     p = np.load(src)
     offset = load_offset(offsets_dir, subject, om)
     start = max(offset, 0)
@@ -456,7 +458,7 @@ def process_subject(subject, P):
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n[{subject}] {len(takes)} takes: {' '.join(takes)}")
 
-    first = aligned_original(subject, takes[0], P.untrimmed_dir, P.complete_dir, P.offsets_dir)
+    first = aligned_original(subject, takes[0], P.work_dir, P.complete_dir, P.offsets_dir)
     H, W = first.shape[1:3]
     mask = ~np.isnan(first[0])                      # (H,W,2), static for every take
     manual = load_manual_labels(P.manual_labels, subject) & mask if not P.no_manual else np.zeros_like(mask)
@@ -467,7 +469,7 @@ def process_subject(subject, P):
     for pas in range(P.passes):
         accs = [FootAccumulator(H, W) for _ in range(2)]
         for om in takes:
-            p = aligned_original(subject, om, P.untrimmed_dir, P.complete_dir, P.offsets_dir)
+            p = aligned_original(subject, om, P.work_dir, P.complete_dir, P.offsets_dir)
             for f in range(2):
                 s = np.where(mask[None, ..., f], np.nan_to_num(p[..., f]), np.nan)
                 accs[f].add(s, mask[..., f] & ~flagged[..., f], P)
@@ -524,7 +526,7 @@ def process_subject(subject, P):
     # ---- repair every take
     take_reports = {}
     for om in takes:
-        p = aligned_original(subject, om, P.untrimmed_dir, P.complete_dir, P.offsets_dir)
+        p = aligned_original(subject, om, P.work_dir, P.complete_dir, P.offsets_dir)
         clean, rstats = repair_take(p, flags, gains, P)
         rep, traces = cop_report(p, clean)
         for f in FOOT:
@@ -552,11 +554,11 @@ def main():
     ap.add_argument("--subjects", nargs="+", default=None)
     ap.add_argument("--all", action="store_true", help="process every subject in Complete/")
     ap.add_argument("--oms", nargs="+", default=None, help="restrict to these takes (repair only; detection still pools all takes)")
-    ap.add_argument("--complete_dir", default="Complete")
-    ap.add_argument("--untrimmed_dir", default="untrimmed")
-    ap.add_argument("--offsets_dir", default="raw_data/offsets")
-    ap.add_argument("--output_dir", default="post_processing_output")
-    ap.add_argument("--manual_labels", default="post_processing_output/faulty_sensors.json")
+    ap.add_argument("--complete_dir", default=COMPLETE)
+    ap.add_argument("--work_dir", "--untrimmed_dir", dest="work_dir", default=WORK)
+    ap.add_argument("--offsets_dir", default=OFFSETS)
+    ap.add_argument("--output_dir", default=QC_PRESSURE)
+    ap.add_argument("--manual_labels", default=FAULTY_SENSORS)
     ap.add_argument("--out_name", default="Pressure_clean.npy")
     ap.add_argument("--no_manual", action="store_true", help="ignore faulty_sensors.json")
     ap.add_argument("--dry_run", action="store_true", help="detect + report, do not write Pressure_clean.npy")

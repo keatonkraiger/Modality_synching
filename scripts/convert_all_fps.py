@@ -4,12 +4,18 @@ import subprocess
 import argparse
 import json
 from pathlib import Path
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import RAW_VIDEO  # noqa: E402
 
 parser = argparse.ArgumentParser(description="Convert all videos to 50 fps if needed.")
-parser.add_argument('--root_dir', type=str, default=r"Data/Abhinav")
+parser.add_argument('--subject', type=str, default=None, help="Shorthand for --root_dir raw_data/Video/<S>")
+parser.add_argument('--root_dir', type=str, default=None)
 
 args = parser.parse_args()
-root_dir = args.root_dir
+root_dir = args.root_dir or (os.path.join(RAW_VIDEO, args.subject) if args.subject else None)
+if root_dir is None:
+    parser.error("give --subject or --root_dir")
 log_file = os.path.join(root_dir, "conversion_log.json")
 
 # Converting to 50 fps is destructive: the re-encoded file takes the original's

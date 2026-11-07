@@ -15,7 +15,7 @@ Frames stage under the system temp dir by default (see --tmp_dir).
 The third panel defaults to `Complete/<S>/OM<i>/Pressure.npy` -- note that this is
 itself the old stage-D3 output for any cell that was hand-labelled, not the raw
 recording.  Use `--old_source original` to compare against the pristine
-`untrimmed/.../Original_Pressure.npy` (offset-cut the same way combine_all.py cuts).
+`work/Pressure/.../Original_Pressure.npy` (offset-cut the same way combine_all.py cuts).
 """
 
 import os
@@ -26,6 +26,8 @@ import tempfile
 import argparse
 import subprocess
 from pathlib import Path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_paths import COMPLETE, WORK, OFFSETS, QC_PRESSURE  # noqa: E402
 
 import numpy as np
 import cv2
@@ -65,7 +67,7 @@ def open_pressure(args, which):
         return np.load(take / args.new_name, mmap_mode="r"), 0
     if args.old_source == "complete":
         return np.load(take / "Pressure.npy", mmap_mode="r"), 0
-    src = Path(args.untrimmed_dir) / "Pressure" / args.subject / args.om / "Original_Pressure.npy"
+    src = Path(args.work_dir) / "Pressure" / args.subject / args.om / "Original_Pressure.npy"
     return np.load(src, mmap_mode="r"), max(load_offset(args.offsets_dir, args.subject, args.om), 0)
 
 
@@ -304,10 +306,10 @@ def main():
     ap.add_argument("--new_label", default="repaired - Pressure_clean.npy")
     ap.add_argument("--old_label", default=None)
     ap.add_argument("--old_source", default="complete", choices=["complete", "original"])
-    ap.add_argument("--complete_dir", default="Complete")
-    ap.add_argument("--untrimmed_dir", default="untrimmed")
-    ap.add_argument("--offsets_dir", default="raw_data/offsets")
-    ap.add_argument("--output_dir", default="post_processing_output")
+    ap.add_argument("--complete_dir", default=COMPLETE)
+    ap.add_argument("--work_dir", "--untrimmed_dir", dest="work_dir", default=WORK)
+    ap.add_argument("--offsets_dir", default=OFFSETS)
+    ap.add_argument("--output_dir", default=QC_PRESSURE)
     args = ap.parse_args()
     if args.old_label is None:
         args.old_label = ("current - Pressure.npy" if args.old_source == "complete"
