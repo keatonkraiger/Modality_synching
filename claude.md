@@ -10,6 +10,21 @@ Paths live in `data_paths.py`; never hardcode them in a script. `raw_data/` and
 `subject_info.json`. OpenPose is stored as `raw_data/openpose/<S>/OM<i>.zip` and
 extracted into `work/openpose/` by `format_OP_jsons.py` on demand.
 
+### State of the OneDrive copy (reorganised 2026-11-06)
+
+- **Remote `raw_data/` is a superset of local.** The 25 fps originals of the 79
+  videos that step 1 converted exist only on OneDrive, under
+  `raw_data/Video/<S>/original_fps/` (local converted them before step 1 kept
+  backups). A `pull raw` brings them down; nothing needs them except re-running step 1.
+- **Offsets are in 50 fps frames.** Most pre-conversion offsets were half the
+  current value. Old remote versions that a push would have overwritten are in
+  `raw_data/offsets/<S>/superseded/` (Abhinav, Keaton) and
+  `raw_data/offsets/Spencer/OG_oms/`. Kyle's legacy `OM<i>_cfg.json` files on the
+  remote are byte-identical to `OM<i>.json`.
+- **Remote `raw_data/Model_output/Subject1/` is newer than local** (re-exported
+  2026-11-05). Pull it before reprocessing Subject1; never push local over it.
+- Anu, Kelly and Qiuyan exist only on OneDrive and still use non-`OM<i>` filenames.
+
 ## Known issues and gotchas
 
 - **`Complete/*/Pressure.npy` is not the recorded data for any subject.** The old

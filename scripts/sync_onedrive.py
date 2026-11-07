@@ -7,7 +7,11 @@ Pull / push the two synced trees between this repo and OneDrive.
 work/ and qc/ are never synced: they are rebuilt from raw_data/.
 
 Uses `rclone copy` only, so neither direction ever deletes a file on the other
-side. Everything is a dry run unless you pass --yes.
+side. A file that exists on both sides but differs IS replaced, but the old
+version is first moved to a timestamped backup folder outside the synced trees:
+    push -> <remote>/_overwritten/<timestamp>/<tree>/...
+    pull -> work/_overwritten/<timestamp>/<tree>/...
+Everything is a dry run unless you pass --yes.
 
     python scripts/sync_onedrive.py pull raw --subjects Kyle --kinds Pressure offsets
     python scripts/sync_onedrive.py pull complete --subjects Kyle --no-video --yes
@@ -18,12 +22,13 @@ Remote root defaults to data_paths.REMOTE; override with $OM_REMOTE or --remote.
 """
 import argparse
 import shutil
+import time
 import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from data_paths import REMOTE, SYNCED  # noqa: E402
+from data_paths import REMOTE, SYNCED, WORK  # noqa: E402
 
 TREES = {"raw": "raw_data", "complete": "Complete"}
 
@@ -71,6 +76,7 @@ def main():
         ap.error("--kinds only applies to the raw tree")
 
     trees = ["raw", "complete"] if a.tree == "all" else [a.tree]
+    stamp = time.strftime("%Y%m%d-%H%M%S")
     for t in trees:
         name = TREES[t]
         local, remote = str(SYNCED[name]), f"{a.remote.rstrip('/')}/{name}"
@@ -79,6 +85,9 @@ def main():
             cmd = ["rclone", "check", local, remote, "--size-only"]
         else:
             cmd = ["rclone", "copy", src, dst, "--transfers", str(a.transfers), "--progress"]
+            backup = (f"{a.remote.rstrip('/')}/_overwritten/{stamp}/{name}" if a.direction == "push"
+                      else str(WORK / "_overwritten" / stamp / name))
+            cmd += ["--backup-dir", backup]
             if not a.yes:
                 cmd.append("--dry-run")
         for r in build_filters(name, a.subjects, a.kinds, a.no_video):

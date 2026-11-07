@@ -201,7 +201,9 @@ Datasets/OrdinaryMovements/
 ```
 
 `scripts/sync_onedrive.py` wraps `rclone copy`. It **never deletes** on either
-side, and it is a **dry run unless you pass `--yes`**:
+side, and it is a **dry run unless you pass `--yes`**. A file that differs is
+replaced, but the old version is kept first in `<remote>/_overwritten/<time>/`
+(push) or `work/_overwritten/<time>/` (pull):
 
 ```bash
 # fresh machine: everything needed to rebuild the dataset
