@@ -5,6 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from data_paths import WORK_OPENPOSE  # noqa: E402
+import takes  # noqa: E402
 
 def reformat_openpose_dirs(base_dir):
     """
@@ -20,7 +21,7 @@ def reformat_openpose_dirs(base_dir):
     base_dir = Path(base_dir)
     print(f"\n=== Starting in-place reformat under '{base_dir}' ===\n")
 
-    for om_dir in sorted(base_dir.glob("OM*")):
+    for om_dir in takes.take_dirs(base_dir):
         om_name = om_dir.name
         json_root = om_dir / "json"
 

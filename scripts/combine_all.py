@@ -8,6 +8,7 @@ import shutil
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_paths import RAW, WORK, COMPLETE, OFFSETS, SUBJECT_INFO, COMPLETE_SUBJECT_INFO_NAME  # noqa: E402
+import takes  # noqa: E402
 
 def upsample_linear(data):
     """Upsample data by 2x using linear interpolation.
@@ -73,13 +74,11 @@ def process_subject(raw_data_dir, work_dir, name, save_root, offsets_dir, specif
     pressure_dir = Path(work_dir) / "Pressure" / name
     vicon_data_dir = Path(work_dir) / "Model_output" / name
     
-    # Get all OM directories from BODY25 (since that's where we know processed data exists)
-    om_dirs = sorted([d for d in body25_dir.iterdir() if d.is_dir() and d.name.startswith("OM")])
-    
-    for om_dir in om_dirs:
+    # Every take directory in BODY25 (that's where we know processed data exists)
+    selection = takes.parse_selection(specific_oms)
+    for om_dir in takes.take_dirs(body25_dir):
         om_idx = om_dir.name
-        om_idx_int = int(om_idx.replace("OM", ""))
-        if specific_oms is not None and om_idx_int not in specific_oms:
+        if not takes.selected(om_idx, selection):
             print(f"Skipping {om_idx} as it is not in the specified list")
             continue
         
@@ -344,6 +343,11 @@ def process_subject(raw_data_dir, work_dir, name, save_root, offsets_dir, specif
                                   ["MOCAP_3D.npy", "MOCAP_MRK.npy", "CoM.npy", "CoM_floor.npy"]),
             "missing_vicon": [f for f in VICON_FILES if f not in vicon],
         }
+        # Only present when a foot was not recorded (that foot is all-NaN in Pressure.npy).
+        missing_feet = [side for i, side in enumerate(["left", "right"])
+                        if np.isnan(pressure[..., i]).all()]
+        if missing_feet:
+            manifest["pressure_missing_feet"] = missing_feet
         with open(save_dir / "manifest.json", "w") as f:
             json.dump(manifest, f, indent=2)
 
@@ -363,8 +367,8 @@ def main():
                         help="Output directory for combined synced data")
     parser.add_argument("--offsets_dir", default=OFFSETS, 
                         help="Directory containing offset JSON files")
-    parser.add_argument('--specific_oms', nargs='+', default=None, type=int, 
-                        help="Process only specific OM directories (e.g., OM1 OM3)")
+    parser.add_argument('--specific_oms', nargs='+', default=None,
+                        help="Only these takes: numbers and/or names (e.g. 1 3 Pick-up OM5_T2)")
     args = parser.parse_args()
     
     process_subject(args.raw_data_dir, args.work_dir, args.name, 

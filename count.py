@@ -38,7 +38,8 @@ def count_om_frames(root_dir):
         if 'Subject1' in subject_path:
             continue
         for item in sorted(os.listdir(subject_path)):
-            if not item.startswith("OM"):
+            # Standard activities only (OM<n>): retakes like OM5_T2 and free-form takes are not table rows
+            if not re.fullmatch(r"OM\d+", item):
                 continue
             if item.startswith('OM12'):
                 continue

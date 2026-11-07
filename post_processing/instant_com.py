@@ -4,6 +4,7 @@ import re
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_paths import VICON_FULL, COMPLETE, COM_COMPARISON  # noqa: E402
+import takes  # noqa: E402
 from glob import glob
 
 import numpy as np
@@ -342,9 +343,7 @@ def subject_filter_pass(name, allowed):
 
 
 def om_filter_pass(name, allowed):
-    if not allowed:
-        return True
-    return name in allowed
+    return takes.selected(name, takes.parse_selection(allowed))
 
 
 def main():
@@ -380,7 +379,8 @@ def main():
         save_data_dir = os.path.join(save_subject_dir, "data")
         os.makedirs(save_data_dir, exist_ok=True)
 
-        om_files = sorted(glob(os.path.join(subject_dir, "OM*.npy")), key=natural_sort_key)
+        om_files = sorted(glob(os.path.join(subject_dir, "*.npy")),
+                          key=lambda f: takes.sort_key(os.path.splitext(os.path.basename(f))[0]))
         subject_summary = {}
 
         for om_file in om_files:

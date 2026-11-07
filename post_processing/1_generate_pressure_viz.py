@@ -13,6 +13,7 @@ import argparse
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_paths import WORK_PRESSURE, QC_PRESSURE  # noqa: E402
+import takes  # noqa: E402
 
 def save_pressure_video(data, output_path, fps=50, max_frames=None):
     """
@@ -92,9 +93,8 @@ def process_subject(subject_name, data_dir, output_dir, max_frames=None, append=
     subject_output_dir = Path(output_dir) / subject_name / "pressure_viz" if append is None else Path(output_dir) / subject_name / f"pressure_viz_{append}"
     subject_output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Find all OM directories
-    om_dirs = sorted([d for d in subject_data_dir.iterdir() 
-                     if d.is_dir() and d.name.startswith("OM")])
+    # Every take directory (OM<n>, OM5_T2, Pick-up, ...)
+    om_dirs = takes.take_dirs(subject_data_dir)
     
     if not om_dirs:
         print(f"No OM directories found for {subject_name}")

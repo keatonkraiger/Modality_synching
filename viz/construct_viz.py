@@ -6,6 +6,7 @@ import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_paths import COMPLETE, MANUAL_CHECK  # noqa: E402
+import takes  # noqa: E402
 from glob import glob
 import numpy as np
 import subprocess
@@ -453,9 +454,9 @@ if __name__ == '__main__':
 
     print(f"Skipping step: {args.skip_step}")
         
-    om_dirs = glob(os.path.join(args.data_path, args.name, 'OM*'))
-    if 'all' not in args.oms:
-        om_dirs = [d for d in om_dirs if any(om in d for om in args.oms)]
+    selection = takes.parse_selection(args.oms)
+    om_dirs = [str(d) for d in takes.take_dirs(os.path.join(args.data_path, args.name))
+               if takes.selected(d.name, selection)]
 
     subject_save_path = os.path.join(args.save_path, args.name)
     os.makedirs(subject_save_path, exist_ok=True)

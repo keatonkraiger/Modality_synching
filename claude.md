@@ -23,7 +23,27 @@ extracted into `work/openpose/` by `format_OP_jsons.py` on demand.
   remote are byte-identical to `OM<i>.json`.
 - **Remote `raw_data/Model_output/Subject1/` is newer than local** (re-exported
   2026-11-05). Pull it before reprocessing Subject1; never push local over it.
-- Anu, Kelly and Qiuyan exist only on OneDrive and still use non-`OM<i>` filenames.
+- Kelly and Qiuyan exist only on OneDrive and still use non-`OM<i>` filenames.
+- **Anu** (pulled 2026-11-06) is left-foot only and has takes `OM1`–`OM11`,
+  `OM5_T2`, `Pick-up`, `Shelf`, `Stairs`. Videos are already 1080p/50 fps. Steps 2
+  and 7 are done (`work/Pressure/Anu`, `work/Model_output/Anu`); still needed:
+  offsets (step 3, `syncher.py`) and OpenPose (step 4), then 5, 6, 8, D4, C.
+
+## Take names and one-foot pressure
+
+Take discovery and `--specific_oms` matching go through `takes.py` — never write
+`startswith("OM")` or `int(name[2:])` again. Any name with video is a take;
+`OM<n>` is just the common case. A foot with no CSV is stored all-NaN (same as
+"no sensor"), so `NaN` checks already treat it correctly; `combine_all.py` adds
+`pressure_missing_feet` to the manifest only for such takes, so existing manifests
+are unchanged. Verified 2026-11-06: steps 5–8 and D4 reproduce existing outputs
+byte for byte with the generalised take code, and D4 / `compare_pressure_video.py`
+run cleanly on a take whose right foot is all NaN.
+
+- **Folder-name case varies.** Keaton has `OM5_v1.mp4` and `OM5_v2_jsons/`. The
+  filesystem is case-insensitive, so lookups by name work, and
+  `format_OP_jsons.py` now matches `_V1_jsons` / `_V2_jsons` case-insensitively
+  (before, it silently skipped Keaton OM5 V2).
 
 ## Known issues and gotchas
 

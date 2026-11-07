@@ -12,6 +12,7 @@ from glob import glob
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_paths import WORK_BODY25, RAW_XCPS  # noqa: E402
+import takes  # noqa: E402
 
 def _check_keys(d):
     """Convert mat_struct objects to dicts."""
@@ -512,7 +513,7 @@ def main():
     parser.add_argument("--xcp_dir", type=str, default=RAW_XCPS, help="Directory containing camera parameter XCP files")
     parser.add_argument('--subjects', type=str, nargs='+', required=True, help="List of subjects to process")
     parser.add_argument('--animate', action='store_true', help="Whether to animate the 3D poses")
-    parser.add_argument('--specific_oms', type=str, nargs='+', default=[], help="Specific OM takes to process (e.g., OM1, OM2)")
+    parser.add_argument('--specific_oms', type=str, nargs='+', default=[], help="Only these takes: numbers and/or names (e.g. OM1 3 Pick-up)")
     parser.add_argument('--dry_run', action='store_true', help="If set, do not save any files")
     parser.add_argument('--no_world_fix', action='store_true', help="If set, do not apply world-frame fix to camera poses")
     args = parser.parse_args() 
@@ -527,19 +528,22 @@ def main():
     }
     for subject in args.subjects:
         # Get camera parameters
-        xcp_files = glob(os.path.join(args.xcp_dir, subject, f'OM*.xcp'))
-        xcp_files.sort()
+        # One .xcp per take; files with no BODY25 take folder (cal01.xcp, ...) are not takes.
+        selection = takes.parse_selection(args.specific_oms)
+        xcp_files = glob(os.path.join(args.xcp_dir, subject, '*.xcp'))
+        xcp_files = sorted(xcp_files, key=lambda x: takes.sort_key(os.path.basename(x)[:-4]))
         
         # new_camera_params_dir = os.path.join(args.xcp_dir, subject, 'Cleaned')
         # os.makedirs(new_camera_params_dir, exist_ok=True)
         
         for xcp in xcp_files:
-            if args.specific_oms and not any(om in xcp for om in args.specific_oms):
+            om = os.path.basename(xcp).replace('.xcp', '')
+            if not takes.selected(om, selection):
                 print(f"Skipping {xcp} as it's not in the specific_oms list.")
                 continue
-                
-            
-            om = os.path.basename(xcp).replace('.xcp', '')
+            if not os.path.isdir(os.path.join(args.body25_dir, subject, om)):
+                print(f"Skipping {xcp}: no take folder {os.path.join(args.body25_dir, subject, om)}")
+                continue
             print(f"Processing {subject} {om}")
             cams = parse_vue_cameras_as_objects(xcp, apply_world_fix= not args.no_world_fix,)
             vue1 = cams['2111392'].to_triangulation_dict()

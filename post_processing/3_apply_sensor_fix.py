@@ -22,6 +22,7 @@ import scipy.ndimage as ndi
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_paths import COMPLETE, QC_PRESSURE, FAULTY_SENSORS  # noqa: E402
+import takes  # noqa: E402
 
 # ---------------------------------------------------------------------
 # Helper functions
@@ -215,7 +216,7 @@ def run_cleaning_all(subject, create_video=False, save_cleaned=False, fps=50, ma
         print(f"[!] Subject directory not found: {subj_dir}")
         return
 
-    om_dirs = sorted([d for d in os.listdir(subj_dir) if d.startswith("OM")])
+    om_dirs = [d.name for d in takes.take_dirs(subj_dir)]
     if not om_dirs:
         print(f"[!] No OM directories found in {subj_dir}")
         return

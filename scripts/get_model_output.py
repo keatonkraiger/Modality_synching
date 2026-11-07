@@ -10,6 +10,7 @@ from collections import OrderedDict
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_paths import RAW, WORK  # noqa: E402
+import takes  # noqa: E402
 
 def create_com_animation(com_data, com_floor_data, title="CoM Animation", save_path=None, N_frames=None):
     """
@@ -218,7 +219,6 @@ def get_consolidated_data(jsons, out_dir, apply_transform=True):
             data = json.load(f)
       
         om_idx = os.path.basename(j).replace('.json','')
-        om_idx_int = int(om_idx.replace("OM", "")) 
         
         # Initialize data structure
         vicon_data = {
@@ -360,7 +360,7 @@ if __name__ == "__main__":
     parser.add_argument('--raw_data_dir', type=str, default=RAW, help="Directory containing raw data")
     parser.add_argument('--out_dir', type=str, default=WORK, help="Output directory for consolidated data")
     parser.add_argument('--no_world_fix', action='store_true', help="If set, do not apply Rz(-90) transformation to data")
-    parser.add_argument('--specific_oms', nargs='+', type=int, default=None, help="List of specific OM indices to process (e.g., --specific_oms 1 2 3)")
+    parser.add_argument('--specific_oms', nargs='+', default=None, help="Only these takes: numbers and/or names (e.g. 1 3 Pick-up)")
     args = parser.parse_args()
      
     person = args.person
@@ -368,20 +368,20 @@ if __name__ == "__main__":
     out_dir = os.path.join(args.out_dir, 'Model_output', person)
     
     os.makedirs(out_dir, exist_ok=True) 
-    natural_sort = lambda l: sorted(l, key=lambda s: int(''.join(filter(str.isdigit, s)) or -1))
     json_dir = os.path.join(raw_data_dir, 'Model_output', person)
+    stem = lambda p: os.path.splitext(os.path.basename(p))[0]
     jsons = glob.glob(os.path.join(json_dir, '*.json'))
-    jsons = natural_sort(jsons)
+    # Only exports of real takes (ones with video), so Calibration.json etc. are skipped.
+    have_video = set(takes.video_takes(os.path.join(raw_data_dir, 'Video', person)))
+    for j in jsons:
+        if stem(j) not in have_video:
+            print(f"Skipping {os.path.basename(j)}: no matching video in raw_data/Video/{person}/")
+    jsons = [j for j in jsons if stem(j) in have_video]
+    jsons = sorted(jsons, key=lambda p: takes.sort_key(stem(p)))
 
-    # Filter JSON files if specific OM indices are provided
-    if args.specific_oms is not None:
-        filtered_jsons = []
-        for json_file in jsons:
-            for om_index in args.specific_oms:
-                if f"OM{om_index}" in json_file:
-                    filtered_jsons.append(json_file)
-                    break
-        jsons = filtered_jsons
+    # Exact take names, so `1` selects OM1 only (not OM10/OM11)
+    selection = takes.parse_selection(args.specific_oms)
+    jsons = [j for j in jsons if takes.selected(stem(j), selection)]
 
     # Process all JSON files
     for json_file in jsons:

@@ -23,8 +23,8 @@ log_file = os.path.join(root_dir, "conversion_log.json")
 # keeping its filename, so the data at the original frame rate is never lost.
 ORIGINAL_FPS_DIRNAME = "original_fps"
 
-# regex for OM<num>_V1.mp4 or OM<num>_V2.mp4
-pattern = re.compile(r"^OM\d+_V[12]\.mp4$", re.IGNORECASE)
+# <take>_V1.mp4 / <take>_V2.mp4 for any take name (OM3, OM5_T2, Pick-up, ...)
+pattern = re.compile(r"^(.+)_V[12]\.mp4$", re.IGNORECASE)
 
 def get_fps(video_path):
     """Return the fps of a video using ffprobe."""
@@ -111,8 +111,8 @@ for subdir, dirs, files in os.walk(root_dir):
                 rel_path = os.path.relpath(in_path, root_dir)
                 path_parts = Path(rel_path).parts
                 
-                # Extract OM index from filename (e.g., OM1_V1.mp4 -> OM1)
-                om_match = re.match(r"(OM\d+)_V[12]\.mp4", file, re.IGNORECASE)
+                # Extract the take name from the filename (e.g., OM1_V1.mp4 -> OM1)
+                om_match = pattern.match(file)
                 if om_match:
                     om_idx = om_match.group(1)
                     

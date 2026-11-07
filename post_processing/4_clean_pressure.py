@@ -49,6 +49,7 @@ import argparse
 from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_paths import COMPLETE, WORK, OFFSETS, QC_PRESSURE, FAULTY_SENSORS  # noqa: E402
+import takes as take_names  # noqa: E402  (`takes` is a local variable name here)
 
 import numpy as np
 import matplotlib
@@ -447,10 +448,8 @@ def save_video(orig, clean, flags, path, fps=50, max_frames=None):
 
 def process_subject(subject, P):
     subj_dir = Path(P.complete_dir) / subject
-    takes = sorted([d.name for d in subj_dir.iterdir() if d.is_dir() and d.name.startswith("OM")],
-                   key=lambda n: int(n[2:]) if n[2:].isdigit() else 0)
-    if P.oms:
-        takes = [t for t in takes if t in P.oms]
+    selection = take_names.parse_selection(P.oms)
+    takes = [d.name for d in take_names.take_dirs(subj_dir) if take_names.selected(d.name, selection)]
     if not takes:
         print(f"[{subject}] no takes found in {subj_dir}")
         return
@@ -553,7 +552,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--subjects", nargs="+", default=None)
     ap.add_argument("--all", action="store_true", help="process every subject in Complete/")
-    ap.add_argument("--oms", nargs="+", default=None, help="restrict to these takes (repair only; detection still pools all takes)")
+    ap.add_argument("--oms", nargs="+", default=None, help="restrict to these takes (numbers and/or names); NOTE this also narrows the detection pool")
     ap.add_argument("--complete_dir", default=COMPLETE)
     ap.add_argument("--work_dir", "--untrimmed_dir", dest="work_dir", default=WORK)
     ap.add_argument("--offsets_dir", default=OFFSETS)
@@ -583,7 +582,7 @@ def main():
     P = ap.parse_args()
     if P.all:
         subjects = sorted(d.name for d in Path(P.complete_dir).iterdir()
-                          if d.is_dir() and any(c.name.startswith("OM") for c in d.iterdir()))
+                          if d.is_dir() and take_names.take_dirs(d))
     elif P.subjects:
         subjects = P.subjects
     else:

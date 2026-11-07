@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import numpy as np
 import argparse
 import cv2
@@ -8,6 +9,7 @@ from collections import OrderedDict
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_paths import RAW, WORK, OFFSETS, COMPLETE, VICON_FULL  # noqa: E402
+import takes  # noqa: E402
 
 # -------------------------------------------------------------------------
 # 1. Helper Functions
@@ -222,13 +224,10 @@ def process_subject(raw_data_dir, work_dir, name, save_root, offsets_dir, specif
         return
 
     # Find OMs
-    om_dirs = sorted([d for d in body25_dir.iterdir() if d.is_dir() and d.name.startswith("OM")])
-
-    for om_dir in om_dirs:
+    selection = takes.parse_selection(specific_oms)
+    for om_dir in takes.take_dirs(body25_dir):
         om_idx = om_dir.name
-        om_idx_int = int(om_idx.replace("OM", ""))
-        
-        if specific_oms is not None and om_idx_int not in specific_oms:
+        if not takes.selected(om_idx, selection):
             continue
 
         print(f"\nProcessing {name} - {om_idx} ...")
@@ -276,9 +275,12 @@ def process_subject(raw_data_dir, work_dir, name, save_root, offsets_dir, specif
         print(f"  Target Length (Video base): {target_len}")
 
         # --- 3. Load Raw Vicon ---
-        json_cands = list(raw_json_dir.glob(f"*{om_idx}*.json"))
-        if not json_cands:
-            json_cands = list(raw_json_dir.glob(f"*take_{om_idx_int:03d}*.json"))
+        # Exact name first: a substring glob for OM1 also matches OM10/OM11, OM5 matches OM5_T2.
+        exact = raw_json_dir / f"{om_idx}.json"
+        json_cands = [exact] if exact.exists() else sorted(raw_json_dir.glob(f"*{om_idx}*.json"))
+        m = re.match(r"^OM(\d+)$", om_idx)
+        if not json_cands and m:
+            json_cands = list(raw_json_dir.glob(f"*take_{int(m.group(1)):03d}*.json"))
             
         if not json_cands:
             print("  Skipping: No JSON file found.")
@@ -397,7 +399,8 @@ if __name__ == "__main__":
     parser.add_argument('--complete_dir', default=COMPLETE, help="Synced output to cross-check CoM against")
     parser.add_argument('--out_dir', type=str, default=VICON_FULL, help="Output directory")
     parser.add_argument('--no_world_fix', action='store_true', help="Do not apply Rz(-90)")
-    parser.add_argument('--specific_oms', nargs='+', type=int, default=None)
+    parser.add_argument('--specific_oms', nargs='+', default=None,
+                        help="Only these takes: numbers and/or names (e.g. 1 3 Pick-up)")
     args = parser.parse_args()
 
     for person in args.persons:

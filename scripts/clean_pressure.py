@@ -205,22 +205,26 @@ def process_all_enhanced(data_dir, save_dir=None, min_val=10, max_val=862,
     files = os.listdir(data_dir)
     processed = []
 
-    for fname in sorted(files):
-        if not fname.endswith("_L.csv"):
-            continue
+    # A take is any <take>_L.csv or <take>_R.csv (take names need not start with OM).
+    bases = sorted({f[:-6] for f in files if f.endswith(("_L.csv", "_R.csv"))})
 
-        base = fname[:-6]  # Remove _L.csv
-
+    for base in bases:
         left_path = os.path.join(data_dir, f"{base}_L.csv")
         right_path = os.path.join(data_dir, f"{base}_R.csv")
 
-        if not os.path.exists(right_path):
-            print(f"[!] Missing right file for: {base}")
-            continue
-
         print(f"[✓] Processing: {base}")
-        left = load_tekscan_csv(left_path)
-        right = load_tekscan_csv(right_path)
+        left = load_tekscan_csv(left_path) if os.path.exists(left_path) else None
+        right = load_tekscan_csv(right_path) if os.path.exists(right_path) else None
+
+        # A foot that was not recorded becomes all-NaN ("no sensor anywhere"),
+        # same shape as the recorded one, so every take stays (N, 60, 21, 2).
+        for side, arr in (("left", left), ("right", right)):
+            if arr is None:
+                print(f"  [!] No {side} foot CSV for {base}: {side} foot will be all NaN")
+        if left is None:
+            left = np.full_like(right, np.nan)
+        if right is None:
+            right = np.full_like(left, np.nan)
 
         min_frames = min(len(left), len(right))
         

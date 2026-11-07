@@ -10,23 +10,18 @@ Zip members are stored relative to the OM folder (`OM<i>_V1_jsons/...`).
     python scripts/openpose_zip.py unpack [--subjects ...]
 """
 import argparse
-import re
 import sys
 import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from data_paths import RAW_OPENPOSE, WORK_OPENPOSE  # noqa: E402
-
-OM_RE = re.compile(r"^OM(\d+)$")
+import takes  # noqa: E402
 
 
 def _om_ok(om, oms):
-    """`oms` may hold ints (1) or names ('OM1'); None means all."""
-    if oms is None:
-        return True
-    n = int(OM_RE.match(om).group(1))
-    return n in oms or om in oms
+    """`oms` may hold numbers (1) or names ('OM1', 'Pick-up'); None means all."""
+    return takes.selected(om, takes.parse_selection(oms))
 
 
 def pack_take(om_dir, zip_path):
@@ -48,7 +43,7 @@ def pack_subject(src_root, subject, dst_root=RAW_OPENPOSE, oms=None, overwrite=F
     if not src.is_dir():
         print(f"  [skip] no {src}")
         return
-    for om_dir in sorted(d for d in src.iterdir() if d.is_dir() and OM_RE.match(d.name)):
+    for om_dir in takes.take_dirs(src):
         if not _om_ok(om_dir.name, oms):
             continue
         zp = Path(dst_root) / subject / f"{om_dir.name}.zip"
@@ -64,9 +59,9 @@ def unpack_subject(subject, src_root=RAW_OPENPOSE, dst_root=WORK_OPENPOSE, oms=N
     src = Path(src_root) / subject
     if not src.is_dir():
         return
-    for zp in sorted(src.glob("OM*.zip")):
+    for zp in sorted(src.glob("*.zip"), key=lambda z: takes.sort_key(z.stem)):
         om = zp.stem
-        if not OM_RE.match(om) or not _om_ok(om, oms):
+        if not _om_ok(om, oms):
             continue
         dst = Path(dst_root) / subject / om
         if dst.is_dir() and any(dst.iterdir()) and not overwrite:

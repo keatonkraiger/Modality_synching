@@ -8,6 +8,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from data_paths import RAW, WORK, RAW_OPENPOSE, WORK_OPENPOSE  # noqa: E402
 from openpose_zip import unpack_subject  # noqa: E402
+import takes  # noqa: E402
 
 def count_video_frames(video_path: str) -> int:
     """Return number of frames in a video using OpenCV."""
@@ -39,7 +40,7 @@ def process_subject(raw_data_dir: str, name: str, output_dir: str, specific_oms=
         raw_data_dir: Root directory containing raw data
         name: Subject name (e.g., 'Kyle', 'Keaton')
         output_dir: Output directory for BODY25 .npy files
-        specific_oms: List of specific OM indices to process (e.g., [1, 3, 5])
+        specific_oms: Only these takes: numbers and/or names (e.g. [1, 3, 'Pick-up'])
         openpose_root: Unzipped OpenPose JSONs, <root>/<name>/OM<i>/OM<i>_V*_jsons/
         openpose_zips: Per-take zips; any take missing from openpose_root is extracted from here
     """
@@ -56,19 +57,15 @@ def process_subject(raw_data_dir: str, name: str, output_dir: str, specific_oms=
         print(f"Warning: Video directory not found: {video_dir}")
         return
     
-    # Find all OM directories in openpose output
-    om_dirs = sorted([d for d in openpose_dir.iterdir() if d.is_dir() and d.name.startswith("OM")])
-    
-    for om_dir in om_dirs:
+    selection = takes.parse_selection(specific_oms)
+    for om_dir in takes.take_dirs(openpose_dir):
         om_idx = om_dir.name  # e.g., "OM1"
         print(f"Processing {name}/{om_idx}")
         
         # Find all *_jsons directories in this OM folder
         json_subdirs = sorted([d for d in om_dir.iterdir() if d.is_dir() and d.name.endswith("_jsons")])
       
-        om_idx_int = int(om_idx.replace("OM", "")) 
-
-        if specific_oms is not None and om_idx_int not in specific_oms:
+        if not takes.selected(om_idx, selection):
             print(f"  Skipping {om_idx} as it's not in the specified list")
             continue
         
@@ -86,10 +83,10 @@ def process_subject(raw_data_dir: str, name: str, output_dir: str, specific_oms=
             subdir_name = json_subdir.name
             
             # Determine version (V1 or V2)
-            if "_V1_jsons" in subdir_name:
+            if subdir_name.upper().endswith("_V1_JSONS"):
                 version = "V1"
                 video_name = f"{om_idx}_V1.mp4"
-            elif "_V2_jsons" in subdir_name:
+            elif subdir_name.upper().endswith("_V2_JSONS"):
                 version = "V2"
                 video_name = f"{om_idx}_V2.mp4"
             else:
@@ -159,8 +156,8 @@ def main():
                         help="Subject name (e.g., 'Kyle', 'Keaton')")
     parser.add_argument("--output_dir", type=str, default=WORK,
                         help="Output directory (will create BODY25/name/OM<idx>/ structure)")
-    parser.add_argument('--specific_oms', nargs='+', default=None, type=int,
-                        help="Process only specific OM directories (e.g., 1 3 for OM1 and OM3)")
+    parser.add_argument('--specific_oms', nargs='+', default=None,
+                        help="Only these takes: numbers and/or names (e.g. 1 3 Pick-up)")
     args = parser.parse_args()
     
     try:

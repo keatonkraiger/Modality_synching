@@ -161,6 +161,24 @@ qc/                                          local
   valid, `0.0` invalid (and XYZ is then meaningless, usually zeroed).
 - **Units** — millimetres for all 3D data, in the Vicon world frame.
 - **Rate** — everything in `Complete/` is 50 fps.
+- **One-foot takes** — if only one foot was recorded (only `<take>_L.csv` or only
+  `<take>_R.csv` exists; Anu, for example, is left-only), the missing foot is kept
+  as **all `NaN`**, so `Pressure.npy` is still `(N, 60, 21, 2)`. `manifest.json`
+  then carries `"pressure_missing_feet": ["right"]`. The key is absent when both
+  feet were recorded.
+
+### Take names
+
+A take's name is its file stem everywhere (`<take>_V1.mp4`, `<take>_L.csv`,
+`<take>.xcp`, `<take>.json`, `offsets/<S>/<take>.json`, `Complete/<S>/<take>/`).
+Names are usually `OM<n>`, but retakes (`OM5_T2`) and free-form names
+(`Pick-up`, `Shelf`, `Stairs`) work the same way. **A name is a take if the
+subject has video for it**, which keeps calibration exports (`cal01.xcp`,
+`Calibration.json`) out. The rules live in [takes.py](takes.py).
+
+Every `--specific_oms` / `--oms` flag accepts bare numbers and names, matched
+exactly: `--specific_oms 1 3 Pick-up OM5_T2` (`1` is `OM1` and never `OM10`).
+Sorting puts `OM<n>` first in numeric order, then everything else alphabetically.
 
 ### Partial takes
 
@@ -517,6 +535,7 @@ not part of the normal run.
 |---|---|
 | `count.py` | Counts frames per OM activity across `Complete/` and emits `om_table.tex`. Excludes `Subject1` and `OM12`. Also holds the OM index → activity-name mapping (OM1 Circular Walking … OM11 Full-Body Stretches). |
 | `data_paths.py` | Where every data directory lives. Change paths here, not in scripts. |
+| `takes.py` | Take naming: discovery, sorting, and `--specific_oms` matching. |
 | `scripts/sync_onedrive.py` | Pull / push / check `raw_data/` and `Complete/` against OneDrive. See [Syncing with OneDrive](#syncing-with-onedrive). |
 | `scripts/openpose_zip.py` | `pack` / `unpack` OpenPose JSONs between `work/openpose/` and the per-take zips in `raw_data/openpose/`. |
 | `scripts/reformat_openpose_dirs.py` | One-off restructure of OpenPose output from `OM<i>/json/Video_V*/` to `OM<i>/OM<i>_V*_jsons/` (`--subject` or `--base_dir`). |
