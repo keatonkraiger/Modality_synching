@@ -27,6 +27,7 @@ RAW_PRESSURE = RAW / "Pressure"              # <S>/OM<i>_{L,R}.csv
 RAW_XCPS = RAW / "XCPs"                      # <S>/OM<i>.xcp
 RAW_MODEL_OUTPUT = RAW / "Model_output"      # <S>/OM<i>.json   (Vicon export)
 RAW_SMPL = RAW / "SMPL"
+RAW_MOCAP_MRK = RAW / "MOCAP_MRK"            # <S>/OM<i>.npy  uncropped markers, native Vicon rate (export_mocap_mrk.py)
 RAW_OPENPOSE = RAW / "openpose"              # <S>/OM<i>.zip    (zipped JSONs)
 OFFSETS = RAW / "offsets"                    # <S>/OM<i>.json   hand: syncher.py
 FAULTY_SENSORS = RAW / "faulty_sensors.json"  # hand: post_processing/2_*

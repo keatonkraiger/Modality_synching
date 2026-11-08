@@ -1,5 +1,4 @@
 import sys
-import cv2
 import json
 import numpy as np
 import subprocess
@@ -101,6 +100,11 @@ class FFmpegWorker(QThread):
 
 class VideoPanel:
     def __init__(self, title, parent_widget, video_path=None, is_pressure=False):
+        # QApplication must exist before OpenCV loads its own Qt libraries.
+        # In mixed Qt5/Qt6 environments, importing cv2 first can segfault
+        # during QApplication's X11 initialization.
+        import cv2
+        self.cv2 = cv2
         self.title = title
         self.is_pressure = is_pressure
         self.label = QLabel(title)
@@ -261,12 +265,17 @@ class VideoPanel:
         if path is None:
             path, _ = QFileDialog.getOpenFileName(self.parent, f"Open {self.title}")
         if path:
-            cap = cv2.VideoCapture(path)
+            cap = self.cv2.VideoCapture(path)
             if cap.isOpened():
+                self.pause()
+                if self.cap is not None:
+                    self.cap.release()
+                self.cached_frames = []
+                self.frame_idx = 0
                 self.cap = cap
                 self.video_path = path
-                self.original_fps = cap.get(cv2.CAP_PROP_FPS)
-                self.total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                self.original_fps = cap.get(self.cv2.CAP_PROP_FPS)
+                self.total_frames = int(cap.get(self.cv2.CAP_PROP_FRAME_COUNT))
                 
                 # Calculate total duration
                 if self.original_fps > 0:
@@ -289,7 +298,7 @@ class VideoPanel:
                 
                 self.cached_frames = []
                 self._cache_initial_frames()
-                self.frame_idx = 0
+                self.set_frame_index(0)
                 return path
         return None
     
@@ -298,7 +307,7 @@ class VideoPanel:
         if not self.cap:
             return
             
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        self.cap.set(self.cv2.CAP_PROP_POS_FRAMES, 0)
         cache_limit = int(self.original_fps * self.cache_limit_seconds) if self.original_fps > 0 else 750
         
         for _ in range(min(cache_limit, self.total_frames)):
@@ -353,7 +362,7 @@ class VideoPanel:
                 self.display_frame(frame)
                 self.frame_idx += 1
             else:
-                self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.frame_idx)
+                self.cap.set(self.cv2.CAP_PROP_POS_FRAMES, self.frame_idx)
                 ret, frame = self.cap.read()
                 if ret:
                     self.display_frame(frame)
@@ -369,13 +378,13 @@ class VideoPanel:
         if self.frame_idx < len(self.cached_frames):
             self.display_frame(self.cached_frames[self.frame_idx])
         else:
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.frame_idx)
+            self.cap.set(self.cv2.CAP_PROP_POS_FRAMES, self.frame_idx)
             ret, frame = self.cap.read()
             if ret:
                 self.display_frame(frame)
 
     def display_frame(self, frame):
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        rgb = self.cv2.cvtColor(frame, self.cv2.COLOR_BGR2RGB)
         h, w, ch = rgb.shape
         qimg = QImage(rgb.data, w, h, ch * w, QImage.Format_RGB888)
         pixmap = QPixmap.fromImage(qimg).scaled(
@@ -490,7 +499,9 @@ class VideoSyncApp(QWidget):
             QMessageBox.warning(self, "No takes", f"No videos found in {RAW_VIDEO / self.subject}")
             return
         idx = names.index(select) if select in names else 0
+        self.take_box.blockSignals(True)
         self.take_box.setCurrentIndex(idx)
+        self.take_box.blockSignals(False)
         if select not in names:
             self._on_take_selected(idx)
 
@@ -504,13 +515,14 @@ class VideoSyncApp(QWidget):
         take = self.take_box.itemData(idx)
         if take is None or take == self.take and self.rgb_video_path:
             return
-        rgb, prs = rgb_path_for(self.subject, take, self.view), pressure_path_for(self.subject, take)
+        rgb, prs = rgb_path_for(self.subject, take, "V1"), pressure_path_for(self.subject, take)
         if not prs.exists():
             QMessageBox.warning(self, "No pressure preview",
                                 f"{prs} does not exist.\n\nBuild the previews first:\n"
                                 f"  python scripts/clean_pressure.py --subject {self.subject}")
             return
         self.take = take
+        self.view = "V1"
         self.rgb_video_path = self.rgb_video.load_video(str(rgb))
         self.pressure_video_path = self.pressure_video.load_video(str(prs))
         self._preload_existing_offset()
